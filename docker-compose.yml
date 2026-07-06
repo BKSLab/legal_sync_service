@@ -1,0 +1,30 @@
+version: '3.7'
+
+volumes:
+  pg_legal_sync_data:
+
+services:
+  db:
+    container_name: legal_sync_db
+    image: postgres:16-alpine3.19
+    env_file: .env
+    restart: always
+    volumes:
+      - pg_legal_sync_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  legal_sync_service:
+    container_name: legal_sync_service
+    build: .
+    env_file: .env
+    restart: on-failure
+    command: bash entrypoint.sh
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 2GB
+    depends_on:
+      - db
