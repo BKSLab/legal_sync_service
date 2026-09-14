@@ -54,6 +54,30 @@ class TrackedDocumentsRepository:
         except SQLAlchemyError as error:
             raise TrackedDocumentRepositoryError(str(error)) from error
 
+    async def get_all_active(self) -> list[TrackedDocument]:
+        """Возвращает все документы, находящиеся на контроле.
+
+        Пагинация здесь не нужна: мониторинг обходит весь реестр целиком, а он
+        по своей природе исчисляется десятками записей, а не тысячами.
+
+        Returns:
+            Документы с включённым мониторингом.
+
+        Raises:
+            TrackedDocumentRepositoryError: Ошибка базы данных.
+        """
+
+        stmt = (
+            select(TrackedDocument)
+            .where(TrackedDocument.is_active.is_(True))
+            .order_by(TrackedDocument.id)
+        )
+        try:
+            result = await self.db_session.execute(stmt)
+            return list(result.scalars().all())
+        except SQLAlchemyError as error:
+            raise TrackedDocumentRepositoryError(str(error)) from error
+
     async def get_list(
         self,
         page: int,

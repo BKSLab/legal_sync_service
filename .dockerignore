@@ -1,6 +1,15 @@
 # .dockerignore
 venv
+.venv
 .git
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage*
+tests
+fixtures
+check_publication_pravo.py
 .db
 db.sqlite3.
 .env

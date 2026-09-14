@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.admin import create_admin
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.legal_changes import router as legal_changes_router
+from app.api.v1.endpoints.monitoring import router as monitoring_router
 from app.api.v1.endpoints.tracked_documents import router as tracked_documents_router
 from app.background_tasks.scheduler import create_scheduler
 from app.core.config_logger import configure_logging
@@ -51,3 +52,4 @@ create_admin(app=app, engine=engine)
 app.include_router(health_router, prefix=settings.app.api_v1_prefix)
 app.include_router(tracked_documents_router, prefix=settings.app.api_v1_prefix)
 app.include_router(legal_changes_router, prefix=settings.app.api_v1_prefix)
+app.include_router(monitoring_router, prefix=settings.app.api_v1_prefix)

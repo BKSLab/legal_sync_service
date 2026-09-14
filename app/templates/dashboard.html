@@ -1,0 +1,114 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+{% if not stats.postgres_ok %}
+<div class="col-12">
+  <div class="alert alert-danger" role="alert">
+    Не удалось загрузить данные мониторинга. База данных недоступна.
+  </div>
+</div>
+{% endif %}
+
+<div class="col-12">
+  <div class="row row-cards mb-3">
+    <div class="col-sm-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="text-muted">Документов в реестре</div>
+          <div class="h2 mb-0">{{ stats.documents_total if stats.postgres_ok else '—' }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="text-muted">На контроле</div>
+          <div class="h2 mb-0">{{ stats.documents_active if stats.postgres_ok else '—' }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="text-muted">Ожидают проверки</div>
+          <div class="h2 mb-0">{{ stats.changes_draft if stats.postgres_ok else '—' }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card">
+        <div class="card-body">
+          <div class="text-muted">Ошибки отправки</div>
+          <div class="h2 mb-0 {{ 'text-danger' if stats.changes_failed else '' }}">
+            {{ stats.changes_failed if stats.postgres_ok else '—' }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="col-12">
+  <div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">Очередь изменений</h3></div>
+    <div class="card-body">
+      <div class="row row-cards">
+        <div class="col-sm-6 col-lg-3">
+          <div class="text-muted">Запланировано</div>
+          <div class="h2 mb-0">{{ stats.changes_scheduled if stats.postgres_ok else '—' }}</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <div class="text-muted">В обработке</div>
+          <div class="h2 mb-0">{{ stats.changes_processing if stats.postgres_ok else '—' }}</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <div class="text-muted">Отправлено за 24 часа</div>
+          <div class="h2 mb-0">{{ stats.changes_sent_recent if stats.postgres_ok else '—' }}</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <div class="text-muted">Последняя отправка (UTC)</div>
+          <div class="h4 mb-0">{{ stats.last_sent_at.strftime('%Y-%m-%d %H:%M') if stats.last_sent_at else '—' }}</div>
+        </div>
+      </div>
+      {% if stats.changes_failed %}
+      <div class="alert alert-warning mt-3 mb-0" role="alert">
+        Есть изменения с ошибками отправки. Причины доступны в
+        <a href="{{ url_for('admin:list', identity='legal-change') }}">событиях изменений</a>.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Последние события</h3>
+      <div class="card-actions">
+        <a href="{{ url_for('admin:list', identity='legal-change') }}" class="btn btn-outline-secondary btn-sm">Все события</a>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-vcenter mb-0">
+        <thead>
+          <tr><th>Дата (UTC)</th><th>Документ</th><th>Статья</th><th>Статус</th></tr>
+        </thead>
+        <tbody>
+          {% for change in stats.recent_changes %}
+          <tr>
+            <td class="text-nowrap">{{ change.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td><a href="{{ url_for('admin:details', identity='legal-change', pk=change.id) }}">{{ change.document_title }}</a></td>
+            <td>{{ change.section_number }}</td>
+            <td>{{ change.status | change_status }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-muted p-4">{{ 'Событий пока нет.' if stats.postgres_ok else 'Данные недоступны.' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if stats.postgres_ok %}
+    <div class="card-footer text-muted">Создано за последние 24 часа: {{ stats.changes_created_recent }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,7 +1,9 @@
+from datetime import date
 from typing import TYPE_CHECKING
 
 from app.db.models.base import Base, TimestampMixin
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, Date, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
@@ -48,11 +50,13 @@ class TrackedDocument(TimestampMixin, Base):
         doc="Целевая аудитория документа.",
         comment="Целевая аудитория документа.",
     )
-    topic: Mapped[str] = mapped_column(
-        String(length=200),
+    topics: Mapped[list[str]] = mapped_column(
+        JSONB,
         nullable=False,
-        doc="Тема документа.",
-        comment="Тема документа.",
+        default=list,
+        server_default="[]",
+        doc="Темы документа для RAG.",
+        comment="Темы документа для RAG Service; допустимы только для other_npa.",
     )
     source_title: Mapped[str] = mapped_column(
         String(length=300),
@@ -66,11 +70,40 @@ class TrackedDocument(TimestampMixin, Base):
         doc="Блок публикации на publication.pravo.gov.ru.",
         comment="Блок публикации на publication.pravo.gov.ru.",
     )
-    consolidated_source_url: Mapped[str] = mapped_column(
-        Text,
+    document_number: Mapped[str] = mapped_column(
+        String(length=100),
         nullable=False,
-        doc="URL источника актуальной консолидированной редакции.",
-        comment="URL источника актуальной консолидированной редакции.",
+        doc="Номер акта, например 197-ФЗ.",
+        comment="Номер акта для поиска в банке консолидированных редакций.",
+    )
+    adoption_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        doc="Дата подписания акта.",
+        comment="Дата подписания акта; используется для проверки найденной карточки.",
+    )
+    ebpi_doc_hash: Mapped[str | None] = mapped_column(
+        String(length=64),
+        nullable=True,
+        index=True,
+        doc="Идентификатор акта в банке консолидированных редакций.",
+        comment="Идентификатор акта в банке редакций actual.pravo.gov.ru; определяется один раз.",
+    )
+    ebpi_doc_id: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Внутренний числовой идентификатор акта в банке редакций.",
+        comment="Внутренний числовой идентификатор акта в банке редакций.",
+    )
+    monitor_from: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        doc="Дата, с которой отслеживаются редакции документа.",
+        comment=(
+            "Дата постановки на контроль. Редакции, вступившие в силу раньше, "
+            "событий не порождают — иначе постановка кодекса на контроль создала бы "
+            "сотни событий по всей его истории."
+        ),
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean,

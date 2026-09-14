@@ -46,5 +46,7 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://localhost:8000${API_V1_PREFIX:-/api/v1}/health" || exit 1
+
+CMD ["bash", "entrypoint.sh"]

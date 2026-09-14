@@ -1,0 +1,94 @@
+/* Стандартные виджеты sqladmin в палитре общей темы Vera RAG. */
+.form-fieldset {
+    background-color: var(--background) !important;
+    border-color: var(--border) !important;
+}
+
+.btn:where(:not(.btn-primary, .btn-secondary, .btn-outline-secondary, .btn-danger, .btn-success)) {
+    background-color: transparent !important;
+    border-color: rgba(245, 184, 0, 0.5) !important;
+    color: var(--accent) !important;
+    font-weight: 600;
+}
+.btn:where(:not(.btn-primary, .btn-secondary, .btn-outline-secondary, .btn-danger, .btn-success)):hover {
+    background-color: var(--accent-bg) !important;
+    border-color: var(--accent) !important;
+}
+input[type="checkbox"], input[type="radio"] {
+    accent-color: var(--accent);
+}
+.form-check-input {
+    background-color: var(--surface);
+    border-color: var(--border);
+}
+.form-check-input:checked {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+.card pre {
+    background-color: var(--background);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+}
+
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple,
+.select2-dropdown,
+.select2-container--default .select2-search__field {
+    background-color: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--foreground) !important;
+}
+.select2-container--default .select2-selection__rendered,
+.select2-container--default .select2-results__option {
+    color: var(--foreground) !important;
+}
+.select2-container--default .select2-results__option--highlighted,
+.select2-container--default .select2-results__option[aria-selected="true"] {
+    background-color: var(--surface-hover) !important;
+    color: var(--accent) !important;
+}
+.select2-container--default .select2-selection__choice {
+    background-color: var(--accent-bg) !important;
+    border-color: var(--border) !important;
+    color: var(--accent) !important;
+}
+
+.flatpickr-calendar {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.flatpickr-months .flatpickr-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-time input,
+.flatpickr-time .flatpickr-am-pm {
+    background-color: var(--surface);
+    color: var(--foreground);
+}
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+    color: var(--accent);
+    fill: var(--accent);
+}
+.flatpickr-day { color: var(--foreground); }
+span.flatpickr-weekday,
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay { color: var(--muted); }
+.flatpickr-day.flatpickr-disabled { color: var(--muted); opacity: 0.5; }
+.flatpickr-day:hover,
+.flatpickr-day:focus {
+    background-color: var(--surface-hover);
+    border-color: var(--border);
+}
+.flatpickr-day.today { border-color: var(--accent); }
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg);
+}
+.flatpickr-time { border-color: var(--border) !important; }
+.flatpickr-time .flatpickr-time-separator { color: var(--foreground); }
+.flatpickr-calendar.arrowTop::after { border-bottom-color: var(--surface); }
+.flatpickr-calendar.arrowBottom::after { border-top-color: var(--surface); }

@@ -1,30 +1,39 @@
-version: '3.7'
-
 volumes:
   pg_legal_sync_data:
 
 services:
   db:
-    container_name: legal_sync_db
-    image: postgres:16-alpine3.19
-    env_file: .env
-    restart: always
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_NAME:?Set POSTGRES_NAME in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
       - pg_legal_sync_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
   legal_sync_service:
-    container_name: legal_sync_service
     build: .
     env_file: .env
-    restart: on-failure
-    command: bash entrypoint.sh
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      RAG_SERVICE_BASE_URL: ${RAG_SERVICE_BASE_URL:-http://host.docker.internal:8002}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${LEGAL_SYNC_PORT:-8000}:8000"
     deploy:
       resources:
         limits:
           memory: 2GB
     depends_on:
-      - db
+      db:
+        condition: service_healthy

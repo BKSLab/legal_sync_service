@@ -1,3 +1,5 @@
+from datetime import date
+
 from app.db.models.tracked_documents import TrackedDocument
 from app.exceptions.tracked_documents import (
     TrackedDocumentNotFoundError,
@@ -20,7 +22,26 @@ class TrackedDocumentsService:
         self.repository = repository
 
     async def create_document(self, data: TrackedDocumentCreateRequest) -> TrackedDocumentSchema:
-        """Создает отслеживаемый документ."""
+        """Ставит документ на контроль.
+
+        Если дата начала наблюдения не задана, берётся текущая: события должны
+        создаваться только по изменениям, наступившим после постановки на
+        контроль, иначе регистрация кодекса породила бы события по всей его
+        истории редакций.
+
+        Args:
+            data: Реквизиты документа и параметры передачи в RAG Service.
+
+        Returns:
+            Созданная запись реестра.
+
+        Raises:
+            TrackedDocumentAlreadyExistsError: Документ уже стоит на контроле.
+            TrackedDocumentServiceError: Ошибка сохранения.
+        """
+
+        if data.monitor_from is None:
+            data = data.model_copy(update={"monitor_from": date.today()})
 
         try:
             document = await self.repository.save(data)

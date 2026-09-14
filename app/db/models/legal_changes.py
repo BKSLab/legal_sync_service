@@ -2,7 +2,7 @@ from datetime import date, datetime
 from enum import StrEnum
 
 from app.db.models.base import Base, TimestampMixin
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,11 +25,19 @@ class LegalChange(TimestampMixin, Base):
 
     __tablename__ = "legal_changes"
     __table_args__ = (
+        # Единица дедупликации — редакция, а не акт-поправка: один закон может
+        # менять одну и ту же статью в нескольких редакциях с разными датами
+        # вступления в силу, и это разные события.
         UniqueConstraint(
             "tracked_document_id",
-            "amending_law_ref",
+            "ebpi_redaction_id",
             "section_number",
-            name="unique_legal_changes_document_law_section",
+            name="unique_legal_changes_document_redaction_section",
+        ),
+        Index(
+            "ix_legal_changes_status_send_at",
+            "status",
+            "send_at",
         ),
     )
 
@@ -60,6 +68,47 @@ class LegalChange(TimestampMixin, Base):
         nullable=False,
         doc="eoNumber или URL закона-поправки.",
         comment="eoNumber или URL закона-поправки.",
+    )
+    amending_doc_hash: Mapped[str | None] = mapped_column(
+        String(length=64),
+        nullable=True,
+        index=True,
+        doc="Идентификатор акта-поправки в банке редакций.",
+        comment=(
+            "Идентификатор акта-поправки в банке редакций. Сопоставление идёт только "
+            "по нему: номер закона повторяется в разные годы."
+        ),
+    )
+    ebpi_redaction_id: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+        doc="Идентификатор редакции отслеживаемого документа.",
+        comment="Идентификатор редакции отслеживаемого документа в банке редакций.",
+    )
+    redaction_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+        doc="Дата вступления редакции в силу по данным портала.",
+        comment="Официальная дата вступления редакции в силу по данным банка редакций.",
+    )
+    amending_act_type: Mapped[str | None] = mapped_column(
+        String(length=120),
+        nullable=True,
+        doc="Вид акта-поправки.",
+        comment="Вид акта-поправки по данным карточки банка редакций.",
+    )
+    amending_act_number: Mapped[str | None] = mapped_column(
+        String(length=100),
+        nullable=True,
+        doc="Номер акта-поправки.",
+        comment="Номер акта-поправки по данным карточки банка редакций.",
+    )
+    amending_act_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+        doc="Дата подписания акта-поправки.",
+        comment="Дата подписания акта-поправки по данным карточки банка редакций.",
     )
     adoption_date: Mapped[date | None] = mapped_column(
         Date,
@@ -103,11 +152,11 @@ class LegalChange(TimestampMixin, Base):
         doc="Переопределение аудитории для RAG.",
         comment="Переопределение аудитории для RAG Service.",
     )
-    topic_override: Mapped[str | None] = mapped_column(
-        String(length=200),
+    topics_override: Mapped[list[str] | None] = mapped_column(
+        JSONB,
         nullable=True,
-        doc="Переопределение темы для RAG.",
-        comment="Переопределение темы для RAG Service.",
+        doc="Переопределение тем для RAG.",
+        comment="Переопределение тем для RAG Service.",
     )
     source_title_override: Mapped[str | None] = mapped_column(
         String(length=300),
