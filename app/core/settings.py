@@ -111,6 +111,7 @@ class PravoEbpiSettings(SettingsBase):
 class RagSettings(SettingsBase):
     """Настройки клиента RAG Service."""
 
+    rag_delivery_enabled: bool = False
     rag_service_base_url: str = "http://localhost:8002"
     rag_service_api_key: SecretStr | None = None
     rag_service_timeout_seconds: int = 60
@@ -120,7 +121,7 @@ class SchedulerSettings(SettingsBase):
     """Настройки фонового планировщика."""
 
     scheduler_enabled: bool = True
-    monitoring_cron_hour: int = 3
+    monitoring_cron_hour: str = "*"
     processing_cron_hour: int = 4
     timezone: str = "Europe/Moscow"
     processing_max_retries: int = 3

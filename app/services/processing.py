@@ -31,11 +31,13 @@ class ProcessingService:
         pravo_ebpi_client: PravoEbpiClient,
         rag_client: RagClient,
         max_retries: int,
+        delivery_enabled: bool = False,
     ):
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
         self.rag_client = rag_client
         self.max_retries = max_retries
+        self.delivery_enabled = delivery_enabled
 
     # Блок публичных методов
 
@@ -47,6 +49,16 @@ class ProcessingService:
         Returns:
             Сводка запуска.
         """
+
+        if not self.delivery_enabled:
+            logger.info("Отправка в RAG отключена; очередь оставлена без изменений.")
+            return ProcessingResult(
+                delivery_disabled=True,
+                changes_selected=0,
+                changes_sent=0,
+                changes_failed=0,
+                changes_postponed=0,
+            )
 
         async with self.legal_changes_repository.processing_lock() as acquired:
             if not acquired:

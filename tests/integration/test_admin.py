@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from app.admin import create_admin
 from app.admin.dashboard import get_dashboard_stats
-from app.core.settings import AdminSettings
+from app.core.settings import AdminSettings, RagSettings
 from app.db.models import LegalChange, LegalChangeStatus, TrackedDocument
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -54,12 +54,16 @@ async def seed_admin_data(session_factory):
 
 @pytest.fixture
 async def admin_client(session_factory, monkeypatch):
-    settings = SimpleNamespace(admin=AdminSettings(
-        _env_file=None, secret_key="admin-test-session-secret",
-        admin_login="operator", admin_password="test-admin-password",
-    ))
+    settings = SimpleNamespace(
+        admin=AdminSettings(
+            _env_file=None, secret_key="admin-test-session-secret",
+            admin_login="operator", admin_password="test-admin-password",
+        ),
+        rag=RagSettings(_env_file=None, rag_delivery_enabled=False),
+    )
     monkeypatch.setattr("app.admin.get_settings", lambda: settings)
     monkeypatch.setattr("app.admin.auth.get_settings", lambda: settings)
+    monkeypatch.setattr("app.admin.views.get_settings", lambda: settings)
     app = FastAPI()
     create_admin(app, session_factory.kw["bind"])
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -97,6 +101,7 @@ async def test_admin_requires_login_and_renders_records_without_executing_docume
     assert dashboard.url.path == "/admin/dashboard"
     assert "Трудовой кодекс" in dashboard.text
     assert "Ожидает проверки" in dashboard.text
+    assert "Отправка в RAG отключена" in dashboard.text
 
     for path in (
         "/admin/tracked-document/list", "/admin/tracked-document/details/1", "/admin/tracked-document/edit/1",

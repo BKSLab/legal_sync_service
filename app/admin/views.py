@@ -5,6 +5,7 @@ from sqladmin import BaseView, ModelView, expose
 from starlette.requests import Request
 
 from app.admin.dashboard import get_dashboard_stats
+from app.core.settings import get_settings
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
 from app.db.models.tracked_documents import TrackedDocument
 
@@ -53,7 +54,11 @@ class DashboardView(BaseView):
         async with self._admin_ref.session_maker() as db_session:
             stats = await get_dashboard_stats(db_session)
         return await self.templates.TemplateResponse(
-            request, "dashboard.html", {"stats": stats, "title": "Дашборд"},
+            request, "dashboard.html", {
+                "stats": stats,
+                "title": "Дашборд",
+                "rag_delivery_enabled": get_settings().rag.rag_delivery_enabled,
+            },
         )
 
 

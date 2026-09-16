@@ -1,5 +1,12 @@
 {% extends "sqladmin/layout.html" %}
 {% block content %}
+{% if not rag_delivery_enabled %}
+<div class="col-12">
+  <div class="alert alert-info" role="status">
+    Отправка в RAG отключена. Найденные изменения сохраняются здесь для наблюдения и проверки.
+  </div>
+</div>
+{% endif %}
 {% if not stats.postgres_ok %}
 <div class="col-12">
   <div class="alert alert-danger" role="alert">

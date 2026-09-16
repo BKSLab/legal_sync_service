@@ -70,11 +70,13 @@ def get_processing_service(
 ) -> ProcessingService:
     """Фабрика сервиса отправки изменений в RAG Service."""
 
+    settings = get_settings()
     return ProcessingService(
         legal_changes_repository=legal_changes_repository,
         pravo_ebpi_client=pravo_ebpi_client,
         rag_client=rag_client,
-        max_retries=get_settings().scheduler.processing_max_retries,
+        max_retries=settings.scheduler.processing_max_retries,
+        delivery_enabled=settings.rag.rag_delivery_enabled,
     )
 
 

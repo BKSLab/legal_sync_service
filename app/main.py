@@ -31,7 +31,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("✅ PostgreSQL доступен.")
     global scheduler
     if settings.scheduler.scheduler_enabled:
-        scheduler = create_scheduler(settings=settings.scheduler)
+        scheduler = create_scheduler(
+            settings=settings.scheduler,
+            rag_delivery_enabled=settings.rag.rag_delivery_enabled,
+        )
         scheduler.start()
         logger.info("✅ Планировщик запущен.")
     yield

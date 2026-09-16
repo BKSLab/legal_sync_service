@@ -82,6 +82,9 @@ async def run_processing_job() -> None:
     """Плановая задача: отправляет в RAG Service события, у которых наступил срок."""
 
     settings = get_settings()
+    if not settings.rag.rag_delivery_enabled:
+        logger.info("Отправка в RAG отключена; плановая обработка пропущена.")
+        return
 
     async with _job_context() as (db_session, httpx_client):
         service = ProcessingService(
@@ -92,11 +95,14 @@ async def run_processing_job() -> None:
             ),
             rag_client=RagClient(httpx_client=httpx_client, settings=settings.rag),
             max_retries=settings.scheduler.processing_max_retries,
+            delivery_enabled=settings.rag.rag_delivery_enabled,
         )
         await service.run_processing()
 
 
-def create_scheduler(settings: SchedulerSettings) -> AsyncIOScheduler:
+def create_scheduler(
+    settings: SchedulerSettings, *, rag_delivery_enabled: bool = False,
+) -> AsyncIOScheduler:
     """Создает APScheduler с задачами Legal Sync Service."""
 
     scheduler = AsyncIOScheduler(timezone=settings.timezone)
@@ -106,10 +112,17 @@ def create_scheduler(settings: SchedulerSettings) -> AsyncIOScheduler:
         id="legal_sync_monitoring",
         replace_existing=True,
     )
-    scheduler.add_job(
-        run_processing_job,
-        CronTrigger(hour=settings.processing_cron_hour, minute=0, timezone=settings.timezone),
-        id="legal_sync_processing",
-        replace_existing=True,
+    logger.info(
+        "Расписание мониторинга: часы=%s, минута=00, часовой пояс=%s.",
+        settings.monitoring_cron_hour, settings.timezone,
     )
+    if rag_delivery_enabled:
+        scheduler.add_job(
+            run_processing_job,
+            CronTrigger(hour=settings.processing_cron_hour, minute=0, timezone=settings.timezone),
+            id="legal_sync_processing",
+            replace_existing=True,
+        )
+    else:
+        logger.info("Отправка в RAG отключена; работает только мониторинг изменений.")
     return scheduler

@@ -63,7 +63,7 @@ def _redaction(**overrides) -> EbpiRedaction:
     return EbpiRedaction.model_validate(values)
 
 
-def _build_service(redaction_html, redaction_content_nodes, changes):
+def _build_service(redaction_html, redaction_content_nodes, changes, *, delivery_enabled=True):
     repository = AsyncMock(spec=LegalChangesRepository)
     repository.processing_lock.return_value.__aenter__.return_value = True
     repository.recover_interrupted_processing.return_value = 0
@@ -83,8 +83,29 @@ def _build_service(redaction_html, redaction_content_nodes, changes):
         pravo_ebpi_client=ebpi_client,
         rag_client=rag_client,
         max_retries=3,
+        delivery_enabled=delivery_enabled,
     )
     return service, repository, ebpi_client, rag_client
+
+
+@pytest.mark.asyncio
+async def test_disabled_delivery_leaves_queue_and_external_services_untouched(
+    redaction_html, redaction_content_nodes,
+):
+    change = _change()
+    service, repository, ebpi_client, rag_client = _build_service(
+        redaction_html, redaction_content_nodes, [change], delivery_enabled=False,
+    )
+
+    result = await service.run_processing()
+
+    assert result.delivery_disabled
+    assert result.changes_selected == result.changes_sent == result.changes_failed == 0
+    assert repository.mock_calls == []
+    assert ebpi_client.mock_calls == []
+    assert rag_client.mock_calls == []
+    assert change.status == LegalChangeStatus.SCHEDULED
+    assert change.retry_count == 0
 
 
 @pytest.mark.asyncio
