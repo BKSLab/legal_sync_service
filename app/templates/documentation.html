@@ -1,0 +1,35 @@
+{% extends "sqladmin/layout.html" %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='documentation.css') }}">
+{% endblock %}
+{% block content %}
+<div class="col-12 documentation-page" id="documentation-top">
+  {% if error %}
+  <div class="alert alert-warning" role="alert">{{ error }}</div>
+  {% else %}
+  <div class="documentation-toolbar">
+    <p class="text-muted mb-0">Устройство сервиса, контракты и порядок работы.</p>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin:documentation_source') }}">Скачать README.md</a>
+  </div>
+  <div class="documentation-layout">
+    <details class="documentation-navigation" open>
+      <summary>Содержание</summary>
+      <nav aria-label="Разделы документации">
+        {% for section in document.sections %}
+        <a href="#{{ section.anchor }}">{{ section.title }}</a>
+        {% endfor %}
+        <a class="documentation-to-top" href="#documentation-top">К началу страницы ↑</a>
+      </nav>
+    </details>
+    <article class="documentation-article" aria-label="README проекта">{{ document.html }}</article>
+  </div>
+  <div class="visually-hidden" id="documentation-copy-status" role="status" aria-live="polite"></div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block tail %}
+{% if document %}
+<script defer src="{{ url_for('static', path='vendor/mermaid-12.0.0.min.js') }}"></script>
+<script defer src="{{ url_for('static', path='documentation.js') }}"></script>
+{% endif %}
+{% endblock %}

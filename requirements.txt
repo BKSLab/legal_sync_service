@@ -8,6 +8,9 @@ alembic==1.14.0
 httpx==0.28.1
 APScheduler==3.11.0
 sqladmin==0.20.1
+markdown-it-py==4.2.0
+nh3==0.3.7
+Pygments==2.21.0
 itsdangerous==2.2.0
 python-multipart==0.0.20
 beautifulsoup4==4.12.3
