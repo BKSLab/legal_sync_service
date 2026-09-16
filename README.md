@@ -27,8 +27,9 @@ hypercorn app.main:app --reload
 
 API будет доступен на `http://localhost:8000`, Swagger UI — на `/docs`, админка — на `/admin`.
 
-При запуске Python вне Docker укажите `RAG_SERVICE_BASE_URL=http://localhost:8002`,
-если RAG опубликован на порту `8002` его стандартным Compose.
+Адрес RAG задаётся через `RAG_SERVICE_BASE_URL` независимо от способа запуска
+Legal Sync. Для текущего сервера это `http://91.218.115.104:8002`; для полностью
+локальной разработки с RAG на том же компьютере — `http://localhost:8002`.
 
 ## Развёртывание через Docker Compose
 
@@ -54,22 +55,22 @@ Compose создаёт базу с именем `POSTGRES_NAME` и ждёт го
 запуском миграций. Затем nginx ждёт готовности приложения. Данные сохраняются в
 томе `pg_legal_sync_data`.
 
-Для Legal Sync и RAG на одном Docker-сервере используются опубликованные порты:
+Legal Sync и RAG обращаются друг к другу по IP серверов и опубликованным портам:
 
 | Где задать | Переменная | Значение |
 | --- | --- | --- |
 | Legal Sync `.env` | `LEGAL_SYNC_PORT` | `8003` |
-| Legal Sync `.env` | `RAG_SERVICE_BASE_URL` | `http://host.docker.internal:8002` |
+| Legal Sync `.env` | `RAG_SERVICE_BASE_URL` | `http://91.218.115.104:8002` |
 | Legal Sync `.env` | `RAG_SERVICE_API_KEY` | Значение `API_KEY` из RAG |
 | RAG `.env` | `LEGAL_SYNC_ENABLED` | `true` |
-| RAG `.env` | `LEGAL_SYNC_BASE_URL` | `http://host.docker.internal:8003` |
+| RAG `.env` | `LEGAL_SYNC_BASE_URL` | `http://91.218.115.104:8003` |
 | RAG `.env` | `LEGAL_SYNC_API_KEY` | Значение `API_KEY` из Legal Sync |
 
-Оба Compose-файла задают `host.docker.internal:host-gateway`, поэтому схема
-работает и в Docker Engine на Linux. Если сервисы на разных серверах, вместо
-этого имени укажите доступный адрес соответствующего сервера. После изменения
-настроек RAG пересоздайте его контейнер. Включите регистрацию в Legal Sync
-до новой загрузки базы знаний в RAG.
+Сейчас оба сервиса размещаются на `91.218.115.104`. При разделении серверов
+задайте в `RAG_SERVICE_BASE_URL` IP сервера RAG, а в `LEGAL_SYNC_BASE_URL` — IP
+сервера Legal Sync. После изменения `.env` пересоздайте соответствующий
+контейнер. Включите регистрацию в Legal Sync до новой загрузки базы знаний
+в RAG.
 
 ```bash
 docker compose config --quiet

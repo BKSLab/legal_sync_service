@@ -22,8 +22,6 @@ services:
   legal_sync_service:
     build: .
     env_file: .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     deploy:
       resources:

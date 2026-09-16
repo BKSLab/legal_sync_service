@@ -93,12 +93,15 @@ Compose создаёт PostgreSQL-базу по `POSTGRES_NAME`, ждёт гот
 `IP:LEGAL_SYNC_PORT → nginx:80 → legal_sync_service:8000`. Порты приложения и
 БД не публикуются. Значения задаются в `.env`, включая `POSTGRES_HOST=db`,
 `POSTGRES_PORT=5432` и `LEGAL_SYNC_PORT=8003`; Compose не переопределяет их.
-Для RAG на том же Docker-сервере используется
-`http://host.docker.internal:8002`. Конфигурация nginx — `nginx/default.conf`.
+Связь между Legal Sync и RAG настроена по IP серверов:
+`RAG_SERVICE_BASE_URL=http://91.218.115.104:8002`.
+Конфигурация nginx — `nginx/default.conf`.
 Для Legal Sync выбран внешний порт `8003`: по предоставленному выводу
 `ss` и `docker ps` с прода от 16.09.2026 он свободен, а `8000` занят
 `api_service_main`. Обратный адрес в RAG:
-`LEGAL_SYNC_BASE_URL=http://host.docker.internal:8003`.
+`LEGAL_SYNC_BASE_URL=http://91.218.115.104:8003`.
+При разделении сервисов по разным серверам меняются эти адреса в `.env`.
+Привязка `host.docker.internal:host-gateway` из Compose Legal Sync удалена.
 
 Проверено 14.09.2026 на изолированном Docker-стенде: сборка runtime-образа,
 старт на пустой PostgreSQL, миграции до `20260907_0002`, `alembic check`,
