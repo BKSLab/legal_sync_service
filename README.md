@@ -5,7 +5,8 @@
 ## Быстрый старт
 
 1. Создать PostgreSQL-базу, например `legal_sync_service_local`.
-2. Заполнить `.env` по образцу `.env.example`.
+2. Заполнить `.env` по образцу `.env.example`. Для запуска Python вне Docker
+   указать `POSTGRES_HOST=localhost` и порт вашей PostgreSQL в `POSTGRES_PORT`.
 3. Установить зависимости:
 
 ```bash
@@ -35,19 +36,33 @@ API будет доступен на `http://localhost:8000`, Swagger UI — н�
 `.env.example` и задайте пароль PostgreSQL, ключ сессий `SECRET_KEY`, логин и
 пароль администратора, `API_KEY` и `RAG_SERVICE_API_KEY`.
 
-Compose создаёт базу с именем `POSTGRES_NAME`, подключает приложение к `db:5432`
-и ждёт готовности PostgreSQL перед запуском миграций. Порт БД на хост не
-публикуется. Данные сохраняются в томе `pg_legal_sync_data`.
+Все значения окружения задаются в `.env`. Приложение получает их через
+`env_file`; Compose не переопределяет адрес БД или RAG. Для Docker задайте
+`POSTGRES_HOST=db`, `POSTGRES_PORT=5432`, `API_V1_PREFIX=/api/v1` и
+`LEGAL_SYNC_PORT=8003`, как в `.env.example`. В секции `environment` PostgreSQL
+остались только ссылки на значения из `.env`: образ ожидает `POSTGRES_DB`,
+а приложение использует `POSTGRES_NAME`. Ключи API и пароль админки в контейнеры
+PostgreSQL и nginx не передаются.
+
+Внешние HTTP-запросы проходят по цепочке
+`IP:LEGAL_SYNC_PORT → nginx:80 → legal_sync_service:8000 → db:5432`.
+Только nginx публикует порт на хост; приложение и БД доступны внутри Docker-сети.
+Сервис работает по HTTP через IP и порт, без домена и TLS. Для такого запуска
+оставьте `ADMIN_SESSION_HTTPS_ONLY=false`.
+
+Compose создаёт базу с именем `POSTGRES_NAME` и ждёт готовности PostgreSQL перед
+запуском миграций. Затем nginx ждёт готовности приложения. Данные сохраняются в
+томе `pg_legal_sync_data`.
 
 Для Legal Sync и RAG на одном Docker-сервере используются опубликованные порты:
 
 | Где задать | Переменная | Значение |
 | --- | --- | --- |
-| Legal Sync `.env` | `LEGAL_SYNC_PORT` | `8000` |
+| Legal Sync `.env` | `LEGAL_SYNC_PORT` | `8003` |
 | Legal Sync `.env` | `RAG_SERVICE_BASE_URL` | `http://host.docker.internal:8002` |
 | Legal Sync `.env` | `RAG_SERVICE_API_KEY` | Значение `API_KEY` из RAG |
 | RAG `.env` | `LEGAL_SYNC_ENABLED` | `true` |
-| RAG `.env` | `LEGAL_SYNC_BASE_URL` | `http://host.docker.internal:8000` |
+| RAG `.env` | `LEGAL_SYNC_BASE_URL` | `http://host.docker.internal:8003` |
 | RAG `.env` | `LEGAL_SYNC_API_KEY` | Значение `API_KEY` из Legal Sync |
 
 Оба Compose-файла задают `host.docker.internal:host-gateway`, поэтому схема
@@ -61,14 +76,22 @@ docker compose config --quiet
 docker compose build
 docker compose up -d --wait --wait-timeout 180
 docker compose ps
-curl --fail http://localhost:8000/api/v1/health
+docker compose exec nginx nginx -t
+curl --fail http://localhost:8003/api/v1/health
 ```
 
 Ожидаемый ответ: `{"status":"ok","database":"ok"}`. Админка доступна на
-`http://localhost:8000/admin`; в ней видны реестр документов, очередь и ошибки
+`http://<IP-сервера>:8003/admin`; в ней видны реестр документов, очередь и ошибки
 отправки. При другом `LEGAL_SYNC_PORT` используйте этот порт в адресах, включая
 обратный адрес в RAG. При другом `API_V1_PREFIX` замените `/api/v1` в запросе;
-проверка состояния контейнера учитывает этот параметр автоматически.
+проверки состояния приложения и nginx учитывают этот параметр автоматически.
+Проверка nginx проходит через приложение до БД.
+
+Конфигурация прокси находится в `nginx/default.conf`. Nginx передаёт API,
+админку и статику в приложение, сохраняет внешний адрес с портом при
+перенаправлениях и обновляет адрес приложения через Docker DNS после
+пересоздания его контейнера. Таймаут ожидания ответа — 600 секунд для ручного
+мониторинга и обработки очереди; предел тела запроса — 10 МБ.
 
 Миграции выполняются при старте (`RUN_MIGRATIONS_ON_START=true`).
 `HYPERCORN_WORKERS` задаёт число процессов приложения. Мониторинг и обработка
@@ -78,9 +101,13 @@ curl --fail http://localhost:8000/api/v1/health
 Для просмотра ошибок запуска:
 
 ```bash
-docker compose logs --tail=100 legal_sync_service db
+docker compose logs --tail=100 nginx legal_sync_service db
 ```
 
 Обновление приложения: `git pull --ff-only`, затем повторите сборку и
 `docker compose up -d --wait --wait-timeout 180`. Обычный `docker compose down`
 сохраняет том PostgreSQL.
+
+После изменения `nginx/default.conf` проверьте конфигурацию командой
+`docker compose exec nginx nginx -t` и примените её командой
+`docker compose exec nginx nginx -s reload`.

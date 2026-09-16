@@ -4,6 +4,7 @@ volumes:
 services:
   db:
     image: postgres:16-alpine
+    # Значения берутся из .env; в БД передаются только её собственные настройки.
     environment:
       POSTGRES_DB: ${POSTGRES_NAME:?Set POSTGRES_NAME in .env}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
@@ -21,19 +22,30 @@ services:
   legal_sync_service:
     build: .
     env_file: .env
-    environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: "5432"
-      RAG_SERVICE_BASE_URL: ${RAG_SERVICE_BASE_URL:-http://host.docker.internal:8002}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
-    ports:
-      - "${LEGAL_SYNC_PORT:-8000}:8000"
     deploy:
       resources:
         limits:
           memory: 2GB
     depends_on:
       db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports:
+      - "${LEGAL_SYNC_PORT:?Set LEGAL_SYNC_PORT in .env}:80"
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1${API_V1_PREFIX:?Set API_V1_PREFIX in .env}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      legal_sync_service:
         condition: service_healthy
