@@ -19,10 +19,12 @@
           <input class="form-control" style="max-width:360px" id="as_of" name="as_of"
             type="datetime-local" step="1" value="{{ as_of }}" required>
         </div>
-        <button type="submit" class="btn btn-primary">Проверить извлечение</button>
-        <a class="btn btn-outline-secondary" href="{{ url_for('admin:details', identity='legal-change', pk=change.id) }}">
-          Карточка события
-        </a>
+        <div class="admin-actions">
+          <button type="submit" class="btn btn-primary">Проверить извлечение</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('admin:details', identity='legal-change', pk=change.id) }}">
+            Карточка события
+          </a>
+        </div>
       </form>
       {% if result %}
       <div class="alert {{ 'alert-success' if result.outcome == 'extracted' else 'alert-info' }} mt-3" role="status">
@@ -30,7 +32,7 @@
       </div>
       {% if result.outcome == 'extracted' %}
       <p>{{ result.consolidated_text_source }} · {{ result.text_length }} символов</p>
-      <pre style="white-space:pre-wrap;word-break:break-word;">{{ result.consolidated_text }}</pre>
+      <pre class="record-text">{{ result.consolidated_text }}</pre>
       {% endif %}
       {% endif %}
     </div>

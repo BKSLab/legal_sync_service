@@ -4,7 +4,7 @@
 <div class="col-12">
   <div class="card">
     <div class="card-header">
-      <h3 class="card-title">Edit {{ model_view.name }}</h3>
+      <h3 class="card-title">{{ 'Редактирование документа' if model_view.identity == 'tracked-document' else 'Редактирование события' }} №{{ get_object_identifier(obj) }}</h3>
     </div>
     <div class="card-body border-bottom py-3">
       <form action="{{ model_view._build_url_for('admin:edit', request, obj) }}" method="POST"
@@ -17,25 +17,17 @@
         <fieldset class="form-fieldset">
           {{ render_form_fields(form, form_opts=form_opts) }}
         </fieldset>
-        <div class="row">
-          <div class="col-md-2">
-            <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-outline-secondary">
-              Cancel
-            </a>
-          </div>
-          <div class="col-md-6">
-            <div class="btn-group flex-wrap">
-              <input type="submit" name="save" value="Save" class="btn btn-primary">
-              <input type="submit" name="save" value="Save and continue editing" class="btn btn-outline-secondary">
-              {% if model_view.can_create %}
-              {% if model_view.save_as %}
-              <input type="submit" name="save" value="Save as new" class="btn btn-outline-secondary">
-              {% else %}
-              <input type="submit" name="save" value="Save and add another" class="btn btn-outline-secondary">
-              {% endif %}
-              {% endif %}
-            </div>
-          </div>
+        <div class="admin-actions form-actions">
+          <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-outline-secondary">Отмена</a>
+          <button type="submit" name="save" value="Save" class="btn btn-primary">Сохранить</button>
+          <button type="submit" name="save" value="Save and continue editing" class="btn btn-outline-secondary">Сохранить и продолжить</button>
+          {% if model_view.can_create %}
+          {% if model_view.save_as %}
+          <button type="submit" name="save" value="Save as new" class="btn btn-outline-secondary">Сохранить как новую запись</button>
+          {% else %}
+          <button type="submit" name="save" value="Save and add another" class="btn btn-outline-secondary">Сохранить и добавить ещё</button>
+          {% endif %}
+          {% endif %}
         </div>
       </form>
     </div>

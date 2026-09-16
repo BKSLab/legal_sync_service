@@ -1,0 +1,41 @@
+{% extends "sqladmin/base.html" %}
+{% block body %}
+<div class="wrapper">
+  <aside class="navbar navbar-expand-md navbar-vertical navbar-dark">
+    <div class="container-fluid">
+      <a class="navbar-brand admin-brand" href="{{ url_for('admin:index') }}">{{ admin.title }}</a>
+      <nav class="navbar navbar-expand-md" aria-label="Разделы админки">
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+          aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Меню разделов">Меню</button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav">
+            {% for item in admin._menu.items %}
+            {% if item.is_visible(request) and item.is_accessible(request) %}
+            <li class="nav-item">
+              <a class="nav-link {% if item.is_active(request) %}active{% endif %}" href="{{ item.url(request) }}">
+                {% if item.icon %}<span class="nav-link-icon"><i class="{{ item.icon }}" aria-hidden="true"></i></span>{% endif %}
+                <span class="nav-link-title">{{ item.display_name }}</span>
+              </a>
+            </li>
+            {% endif %}
+            {% endfor %}
+          </ul>
+        </div>
+      </nav>
+      {% if admin.authentication_backend %}
+      <a href="{{ url_for('admin:logout') }}" class="btn btn-outline-secondary admin-logout">Выйти</a>
+      {% endif %}
+    </div>
+  </aside>
+  <div class="page-wrapper">
+    {% if title %}
+    <div class="container-fluid page-header"><h2 class="page-title">{{ title }}</h2></div>
+    {% endif %}
+    <div class="page-body flex-grow-1">
+      <div class="container-fluid">
+        <div class="row row-deck row-cards">{% block content %}{% endblock %}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "sqladmin/base.html" %}
+{% block body %}
+<main class="admin-login">
+  <form class="card" action="{{ url_for('admin:login') }}" method="post">
+    <div class="card-body">
+      <h1 class="card-title mb-4">Вход в Legal Sync</h1>
+      {% if error %}<div class="alert alert-danger" role="alert">Неверный логин или пароль.</div>{% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="username">Логин</label>
+        <input id="username" name="username" type="text" class="form-control" autocomplete="username" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="password">Пароль</label>
+        <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">Войти</button>
+    </div>
+  </form>
+</main>
+{% endblock %}

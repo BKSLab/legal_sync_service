@@ -4,7 +4,7 @@
 <div class="col-12">
   <div class="card">
     <div class="card-header">
-      <h3 class="card-title">New {{ model_view.name }}</h3>
+      <h3 class="card-title">{{ 'Новый документ' if model_view.identity == 'tracked-document' else 'Новое событие' }}</h3>
     </div>
     <div class="card-body border-bottom py-3">
       <form action="{{ url_for('admin:create', identity=model_view.identity) }}" method="POST"
@@ -17,19 +17,11 @@
         <fieldset class="form-fieldset">
           {{ render_form_fields(form, form_opts=form_opts) }}
         </fieldset>
-        <div class="row">
-          <div class="col-md-2">
-            <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-outline-secondary">
-              Cancel
-            </a>
-          </div>
-          <div class="col-md-6">
-            <div class="btn-group flex-wrap">
-              <input type="submit" name="save" value="Save" class="btn btn-primary">
-              <input type="submit" name="save" value="Save and continue editing" class="btn btn-outline-secondary">
-              <input type="submit" name="save" value="Save and add another" class="btn btn-outline-secondary">
-            </div>
-          </div>
+        <div class="admin-actions form-actions">
+          <a href="{{ url_for('admin:list', identity=model_view.identity) }}" class="btn btn-outline-secondary">Отмена</a>
+          <button type="submit" name="save" value="Save" class="btn btn-primary">Сохранить</button>
+          <button type="submit" name="save" value="Save and continue editing" class="btn btn-outline-secondary">Сохранить и продолжить</button>
+          <button type="submit" name="save" value="Save and add another" class="btn btn-outline-secondary">Сохранить и добавить ещё</button>
         </div>
       </form>
     </div>

@@ -1,0 +1,18 @@
+<div class="modal fade" id="modal-delete" tabindex="-1" role="dialog" aria-labelledby="delete-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header"><h3 class="modal-title" id="delete-title">Удаление записей</h3></div>
+      <div class="modal-body">
+        <p id="modal-delete-text"></p>
+        {% if model_view.identity == 'tracked-document' %}
+        <p>Вместе с документом удаляются его события изменений.</p>
+        {% endif %}
+        <div id="delete-error" class="alert alert-danger" role="alert" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Отмена</button>
+        <button id="modal-delete-button" type="button" class="btn btn-danger">Удалить</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -41,7 +41,7 @@ def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
         app=app,
         engine=engine,
         authentication_backend=authentication_backend,
-        title="Legal Sync Service — Admin",
+        title="Legal Sync — Администрирование",
         base_url="/admin",
         templates_dir=str(_APP_DIR / "templates"),
     )

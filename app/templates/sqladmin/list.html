@@ -1,0 +1,131 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header admin-toolbar">
+      <h2 class="card-title">{{ model_view.name_plural }}</h2>
+      <div class="admin-actions">
+        {% if model_view.can_export %}
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown" aria-expanded="false">Экспорт</button>
+          <div class="dropdown-menu dropdown-menu-right">
+            {% for export_type in model_view.export_types %}
+            <a class="dropdown-item" href="{{ url_for('admin:export', identity=model_view.identity, export_type=export_type) }}">Скачать {{ export_type | upper }}</a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% if model_view.can_create %}
+        <a href="{{ url_for('admin:create', identity=model_view.identity) }}" class="btn btn-primary">
+          {{ 'Добавить документ' if model_view.identity == 'tracked-document' else 'Создать событие' }}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body border-bottom admin-toolbar">
+      {% if model_view.can_delete %}
+      <button class="btn btn-danger" id="action-delete" type="button" disabled
+        data-url="{{ url_for('admin:delete', identity=model_view.identity) }}">Удалить выбранные <span id="selection-count"></span></button>
+      {% endif %}
+      {% if model_view.column_searchable_list %}
+      <form class="admin-search" method="get" action="{{ url_for('admin:list', identity=model_view.identity) }}" role="search">
+        {% for key in ['sortBy', 'sort', 'pageSize'] %}
+        {% if request.query_params.get(key) %}<input type="hidden" name="{{ key }}" value="{{ request.query_params.get(key) }}">{% endif %}
+        {% endfor %}
+        <label class="form-label" for="search-input">Поиск по полям: {{ model_view.search_placeholder() }}</label>
+        <div class="admin-actions">
+          <input id="search-input" name="search" type="search" class="form-control" value="{{ request.query_params.get('search', '') }}">
+          <button class="btn btn-outline-secondary" type="submit">Найти</button>
+          {% if request.query_params.get('search') %}
+          <a class="btn btn-outline-secondary" href="{{ request.url.remove_query_params(['search', 'page']) }}">Сбросить</a>
+          {% else %}<button class="btn btn-outline-secondary" type="button" disabled>Сбросить</button>{% endif %}
+        </div>
+      </form>
+      {% endif %}
+    </div>
+    <div class="table-responsive" tabindex="0" role="region" aria-label="{{ model_view.name_plural }}">
+      <table class="table card-table table-vcenter admin-list">
+        <thead><tr>
+          <th class="w-1"><input class="form-check-input" type="checkbox" aria-label="Выбрать все записи на странице" id="select-all"></th>
+          <th>Действия</th>
+          {% for name in model_view._list_prop_names %}
+          {% set label = model_view._column_labels.get(name, name) %}
+          <th scope="col" data-column="{{ name }}">
+            {% if name in model_view._sort_fields %}
+            {% set active = request.query_params.get('sortBy') == name %}
+            {% set descending = active and request.query_params.get('sort') == 'asc' %}
+            <a href="{{ request.url.include_query_params(sortBy=name, sort='desc' if descending else 'asc', page=1) }}">
+              {{ label }}{% if active %} {{ '↑' if descending else '↓' }}{% endif %}
+            </a>
+            {% else %}{{ label }}{% endif %}
+          </th>
+          {% endfor %}
+        </tr></thead>
+        <tbody>
+          {% for row in pagination.rows %}
+          <tr>
+            <td><input class="form-check-input select-box" type="checkbox" value="{{ get_object_identifier(row) }}"
+              aria-label="Выбрать запись №{{ get_object_identifier(row) }}"></td>
+            <td>
+              <div class="row-actions">
+                {% if model_view.can_view_details %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ model_view._build_url_for('admin:details', request, row) }}">Открыть</a>
+                {% endif %}
+                {% if model_view.can_edit %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ model_view._build_url_for('admin:edit', request, row) }}">Изменить</a>
+                {% endif %}
+                {% if model_view.can_delete %}
+                <button class="btn btn-sm btn-danger" type="button" data-toggle="modal" data-target="#modal-delete"
+                  data-pk="{{ get_object_identifier(row) }}" data-url="{{ model_view._url_for_delete(request, row) }}">Удалить</button>
+                {% endif %}
+              </div>
+            </td>
+            {% for name in model_view._list_prop_names %}
+            {% set value, formatted_value = model_view.get_list_value(row, name) %}
+            <td data-column="{{ name }}">
+              {% if name in model_view._relation_names and value is not none %}
+              <a href="{{ model_view._url_for_details_with_prop(request, row, name) }}">{{ formatted_value }}</a>
+              {% else %}{{ formatted_value }}{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% else %}
+          <tr><td colspan="{{ model_view._list_prop_names | length + 2 }}" class="text-muted p-4">Записей не найдено.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer admin-toolbar">
+      <p class="m-0 text-muted">Показано {{ ((pagination.page - 1) * pagination.page_size) + 1 if pagination.count else 0 }}–{{ min(pagination.page * pagination.page_size, pagination.count) }} из {{ pagination.count }}</p>
+      <nav aria-label="Страницы списка">
+        <ul class="pagination m-0">
+          <li class="page-item {% if not pagination.has_previous %}disabled{% endif %}">
+            {% if pagination.has_previous %}<a class="page-link" href="{{ pagination.previous_page.url }}">Назад</a>
+            {% else %}<span class="page-link" aria-disabled="true">Назад</span>{% endif %}
+          </li>
+          {% for control in pagination.page_controls %}
+          <li class="page-item {% if control.number == pagination.page %}active{% endif %}">
+            <a class="page-link" href="{{ control.url }}" {% if control.number == pagination.page %}aria-current="page"{% endif %}>{{ control.number }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            {% if pagination.has_next %}<a class="page-link" href="{{ pagination.next_page.url }}">Вперёд</a>
+            {% else %}<span class="page-link" aria-disabled="true">Вперёд</span>{% endif %}
+          </li>
+        </ul>
+      </nav>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown" aria-expanded="false">
+          По {{ pagination.page_size }} на странице
+        </button>
+        <div class="dropdown-menu dropdown-menu-right">
+          {% for size in model_view.page_size_options %}
+          <a class="dropdown-item" href="{{ request.url.include_query_params(pageSize=size, page=1) }}">По {{ size }} на странице</a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if model_view.can_delete %}{% include 'sqladmin/modals/delete.html' %}{% endif %}
+</div>
+{% endblock %}

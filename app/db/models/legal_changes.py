@@ -233,3 +233,6 @@ class LegalChange(TimestampMixin, Base):
             f"<LegalChange(id={self.id}, section_number='{self.section_number}', "
             f"status='{self.status}')>"
         )
+
+    def __str__(self) -> str:
+        return f"Событие №{self.id} · статья {self.section_number}"

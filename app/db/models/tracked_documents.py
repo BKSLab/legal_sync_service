@@ -124,3 +124,6 @@ class TrackedDocument(TimestampMixin, Base):
             f"<TrackedDocument(id={self.id}, document_id='{self.document_id}', "
             f"short_name='{self.short_name}')>"
         )
+
+    def __str__(self) -> str:
+        return f"{self.short_name} ({self.document_id})"

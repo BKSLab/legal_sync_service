@@ -1,0 +1,34 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header admin-toolbar">
+      <h2 class="card-title">{{ model_view.name }} №{{ get_object_identifier(model) }}</h2>
+      {% include 'sqladmin/_record_actions.html' %}
+    </div>
+    <div class="card-body">
+      <dl class="record-fields">
+        {% for name in model_view._details_prop_names %}
+        {% set value, formatted_value = model_view.get_detail_value(model, name) %}
+        <div class="record-field" data-field="{{ name }}">
+          <dt>{{ model_view._column_labels.get(name, name) }}</dt>
+          <dd>
+            {% if name in model_view._relation_names %}
+              {% if is_list(value) %}
+              {% for item in value %}
+              <a class="record-relation" href="{{ model_view._build_url_for('admin:details', request, item) }}">{{ item }}</a>
+              {% else %}—{% endfor %}
+              {% elif value is not none %}
+              <a href="{{ model_view._url_for_details_with_prop(request, model, name) }}">{{ formatted_value }}</a>
+              {% else %}—{% endif %}
+            {% else %}{{ formatted_value }}{% endif %}
+          </dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </div>
+    <div class="card-footer">{% include 'sqladmin/_record_actions.html' %}</div>
+  </div>
+</div>
+{% if model_view.can_delete %}{% include 'sqladmin/modals/delete.html' %}{% endif %}
+{% endblock %}
