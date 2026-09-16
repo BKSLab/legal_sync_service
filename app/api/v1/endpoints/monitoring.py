@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.dependencies.auth import VerifyApiKeyDep
 from app.dependencies.services import MonitoringServiceDep, ProcessingServiceDep
+from app.exceptions.configuration import ConfigurationUnavailableError
 from app.exceptions.pravo_ebpi import PravoEbpiClientError
 from app.exceptions.tracked_documents import TrackedDocumentServiceError
 from app.schemas.monitoring import MonitoringResult, ProcessingResult
@@ -83,9 +84,9 @@ async def run_monitoring(
     summary="Запустить отправку изменений в RAG вручную",
     description=(
         "Отправляет в RAG Service подтверждённые события, у которых наступила дата "
-        "вступления в силу. Отправка выполняется только при RAG_DELIVERY_ENABLED=true; "
+        "вступления в силу. Отправка выполняется только при включении в разделе «Конфигурация» админки; "
         "иначе возвращается delivery_disabled=true без изменения очереди. "
-        "При включённой отправке ту же операцию ежедневно выполняет планировщик."
+        "При включённой отправке ту же операцию по настроенному расписанию выполняет планировщик."
     ),
     operation_id="runProcessing",
     response_description="Сводка запуска обработки очереди.",
@@ -120,6 +121,10 @@ async def run_processing(
     """
 
     logger.info("🚀 Запрос POST /monitoring/process.")
-    result = await service.run_processing()
+    try:
+        result = await service.run_processing()
+    except ConfigurationUnavailableError as error:
+        logger.exception("Не удалось прочитать настройки отправки.")
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     logger.info("✅ Запрос POST /monitoring/process выполнен. отправлено=%s", result.changes_sent)
     return result

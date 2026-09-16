@@ -6,9 +6,11 @@ import pytest
 from app.clients.pravo_ebpi import PravoEbpiClient
 from app.clients.rag import RagClient
 from app.db.models.legal_changes import LegalChangeStatus
+from app.exceptions.configuration import ConfigurationUnavailableError
 from app.exceptions.pravo_ebpi import PravoEbpiRequestError
 from app.exceptions.rag import RagClientError, RagRejectedError, RagStaleRevisionError
 from app.repositories.legal_changes import LegalChangesRepository
+from app.schemas.configuration import ConfigurationValues
 from app.schemas.pravo_ebpi import EbpiRedaction
 from app.services.processing import ProcessingService
 from tests.conftest import TK_RF_DOC_HASH, TK_RF_REDACTION_ID
@@ -106,6 +108,81 @@ async def test_disabled_delivery_leaves_queue_and_external_services_untouched(
     assert rag_client.mock_calls == []
     assert change.status == LegalChangeStatus.SCHEDULED
     assert change.retry_count == 0
+
+
+async def test_live_configuration_enables_an_existing_service_and_updates_retry_limit(redaction_html, redaction_content_nodes):
+    service, repository, _, rag_client = _build_service(redaction_html, redaction_content_nodes, [_change()], delivery_enabled=False)
+    service.configuration_provider = AsyncMock(return_value=ConfigurationValues(rag_delivery_enabled=True, processing_max_retries=7))
+    result = await service.run_processing()
+    assert result.changes_sent == 1
+    assert repository.get_due_for_sending.await_args.kwargs["max_retries"] == 7
+    rag_client.update_section.assert_awaited_once()
+
+
+@pytest.mark.parametrize("original_status", [LegalChangeStatus.SCHEDULED, LegalChangeStatus.FAILED])
+async def test_disabling_during_extraction_restores_previous_status_without_delivery(
+    redaction_html, redaction_content_nodes, original_status,
+):
+    change = _change(status=original_status, retry_count=1)
+    service, repository, ebpi_client, rag_client = _build_service(redaction_html, redaction_content_nodes, [change])
+    state = ConfigurationValues(rag_delivery_enabled=True)
+
+    async def configuration():
+        return state
+
+    async def download(redaction_id):
+        state.rag_delivery_enabled = False
+        return redaction_html
+
+    service.configuration_provider = configuration
+    ebpi_client.get_redaction_text.side_effect = download
+    result = await service.run_processing()
+    assert result.delivery_disabled and result.changes_sent == result.changes_failed == 0
+    rag_client.update_section.assert_not_called()
+    assert repository.update.await_args.kwargs["values"] == {"status": original_status}
+    assert change.retry_count == 1
+
+
+async def test_disabling_after_first_send_stops_remaining_batch(redaction_html, redaction_content_nodes):
+    service, repository, _, rag_client = _build_service(redaction_html, redaction_content_nodes, [_change(id=1), _change(id=2)])
+    state = ConfigurationValues(rag_delivery_enabled=True)
+
+    async def configuration():
+        return state
+
+    async def receive(**kwargs):
+        state.rag_delivery_enabled = False
+        return {"chunks_count": 4}
+
+    service.configuration_provider = configuration
+    rag_client.update_section.side_effect = receive
+    result = await service.run_processing()
+    assert result.delivery_disabled and result.changes_sent == 1
+    assert result.changes_failed == 0
+    rag_client.update_section.assert_awaited_once()
+    assert {call.kwargs["change"].id for call in repository.update.await_args_list} == {1}
+
+
+async def test_configuration_failure_before_delivery_aborts_without_incrementing_attempts(redaction_html, redaction_content_nodes):
+    service, repository, ebpi_client, rag_client = _build_service(redaction_html, redaction_content_nodes, [_change()])
+    available = True
+
+    async def configuration():
+        if not available:
+            raise ConfigurationUnavailableError()
+        return ConfigurationValues(rag_delivery_enabled=True)
+
+    async def download(redaction_id):
+        nonlocal available
+        available = False
+        return redaction_html
+
+    service.configuration_provider = configuration
+    ebpi_client.get_redaction_text.side_effect = download
+    with pytest.raises(ConfigurationUnavailableError):
+        await service.run_processing()
+    rag_client.update_section.assert_not_called()
+    assert repository.update.await_args_list[-1].kwargs["values"] == {"status": LegalChangeStatus.PROCESSING}
 
 
 @pytest.mark.asyncio

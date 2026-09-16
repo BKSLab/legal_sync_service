@@ -1,0 +1,102 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12 configuration-page">
+  {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+  {% if configuration %}
+  {% if request.query_params.get('saved') and not errors %}
+  <div class="alert alert-success" role="status">Конфигурация сохранена. Расписания применятся в течение 15 секунд. Состояние отправки проверяется перед каждым запросом в RAG.</div>
+  {% endif %}
+  {% if not scheduler_enabled %}
+  <div class="alert alert-warning" role="status">Планировщик отключён на сервере. Автоматические запуски недоступны, пока SCHEDULER_ENABLED=false.</div>
+  {% endif %}
+  <div class="card mb-3">
+    <div class="card-header admin-toolbar">
+      <h2 class="card-title">Текущее состояние</h2>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin:configuration') }}">Обновить</a>
+    </div>
+    <div class="card-body configuration-summary">
+      <div><div class="text-muted">Отправка в RAG</div><strong>{{ 'Включена' if configuration.rag_delivery_enabled else 'Выключена' }}</strong></div>
+      <div><div class="text-muted">Следующая проверка</div><strong>{{ next_runs.monitoring }}</strong></div>
+      <div><div class="text-muted">Следующая отправка по расписанию</div><strong>{{ next_runs.processing }}</strong></div>
+      <div><div class="text-muted">Часовой пояс расписаний</div><strong>{{ configuration.timezone }}</strong></div>
+    </div>
+    <div class="card-footer text-muted">Версия {{ configuration.version }} · {{ configuration.updated_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · {{ configuration.updated_by }}</div>
+  </div>
+
+  <form class="card mb-3" method="post" action="{{ url_for('admin:configuration') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="version" value="{{ values.version }}">
+    <div class="card-header"><h2 class="card-title">Настройки работы сервиса</h2></div>
+    <div class="card-body configuration-form">
+      <div class="mb-4">
+        <label class="configuration-toggle" for="rag_delivery_enabled">
+          <input class="form-check-input" id="rag_delivery_enabled" name="rag_delivery_enabled" type="checkbox" {% if values.rag_delivery_enabled %}checked{% endif %}>
+          <span>Разрешить отправку в RAG</span>
+        </label>
+        <p class="text-muted mt-2 mb-0">Отправляются только подтверждённые события, у которых наступил срок. Выключатель действует и на ручную обработку. Уже начатый запрос в RAG может завершиться после отключения.</p>
+        {% if errors.rag_delivery_enabled %}<div class="text-danger" role="alert">{{ errors.rag_delivery_enabled }}</div>{% endif %}
+      </div>
+      <div class="mb-4">
+        <label class="configuration-toggle" for="monitoring_enabled">
+          <input class="form-check-input" id="monitoring_enabled" name="monitoring_enabled" type="checkbox" {% if values.monitoring_enabled %}checked{% endif %}>
+          <span>Мониторинг по расписанию</span>
+        </label>
+        <p class="text-muted mt-2 mb-0">Пауза автоматических проверок. Уже начатая проверка завершится; ручной запуск мониторинга остаётся доступным.</p>
+      </div>
+      <div class="configuration-grid">
+        {% for name in ['monitoring_cron_hour', 'processing_cron_hour'] %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ name }}">{{ labels[name] }}</label>
+          <select class="form-control" id="{{ name }}" name="{{ name }}" required>
+            {% for value, label in schedule_choices.items() %}<option value="{{ value }}" {% if values[name] == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+          {% if errors[name] %}<div class="text-danger" role="alert">{{ errors[name] }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        <div class="mb-3">
+          <label class="form-label" for="timezone">Часовой пояс расписаний</label>
+          <input class="form-control" id="timezone" name="timezone" list="timezones" value="{{ values.timezone }}" required maxlength="100">
+          <datalist id="timezones"><option value="Europe/Moscow"><option value="Europe/Samara"><option value="Asia/Yekaterinburg"><option value="Asia/Novosibirsk"><option value="Asia/Vladivostok"><option value="UTC"></datalist>
+          {% if errors.timezone %}<div class="text-danger" role="alert">{{ errors.timezone }}</div>{% endif %}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="processing_max_retries">Лимит попыток отправки</label>
+          <input class="form-control" id="processing_max_retries" name="processing_max_retries" type="number" min="1" max="20" value="{{ values.processing_max_retries }}" required>
+          {% if errors.processing_max_retries %}<div class="text-danger" role="alert">{{ errors.processing_max_retries }}</div>{% endif %}
+        </div>
+      </div>
+      <p class="text-muted">Запуски выполняются в начале часа по выбранному часовому поясу. Смена расписания не запускает задачу немедленно. Увеличение лимита возвращает в обработку события, у которых ошибок меньше нового лимита.</p>
+      <div class="admin-actions">
+        <button class="btn btn-primary" type="submit" {% if conflict %}disabled{% endif %}>Сохранить конфигурацию</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin:configuration') }}">{{ 'Загрузить актуальные настройки' if conflict else 'Отменить изменения' }}</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="card mb-3">
+    <div class="card-header"><h2 class="card-title">Подключение к RAG</h2></div>
+    <div class="card-body">
+      <p>Адрес сервиса: <span class="configuration-address">{{ rag_address }}</span></p>
+      <p>Ключ доступа: {{ 'задан' if rag_key_configured else 'не задан' }}.</p>
+      <p class="text-muted mb-0">Адреса и ключи задаются в .env на сервере. Наличие ключа не означает, что соединение проверено. Сохранение конфигурации не обращается к RAG.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">Последние изменения конфигурации</h2></div>
+    <div class="card-body">
+      {% for entry in history %}
+      <article class="configuration-history">
+        <p class="text-muted">{{ entry.changed_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · {{ entry.changed_by }} · версия {{ entry.version }}</p>
+        <ul>{% for name, change in entry.changes.items() %}
+          <li><strong>{{ labels[name] }}</strong>: {{ display_value(name, change.before) }} → {{ display_value(name, change.after) }}</li>
+        {% endfor %}</ul>
+      </article>
+      {% else %}<p class="text-muted mb-0">Настройки ещё не меняли. Начальные значения перенесены из конфигурации сервера.</p>{% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin:configuration') }}">Обновить</a>
+  {% endif %}
+</div>
+{% endblock %}

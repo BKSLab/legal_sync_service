@@ -121,7 +121,7 @@ async def test_search_and_reset_return_records_and_reset_pagination(admin_client
 
 def _form_values(html):
     """Поля, которые браузер отправляет при сохранении открытой формы."""
-    form = BeautifulSoup(html, "html.parser").find("form", method="POST")
+    form = BeautifulSoup(html, "html.parser").find("form", method=lambda value: value and value.lower() == "post")
     result = {}
     for field in form.select("input[name], textarea[name], select[name]"):
         name = field["name"]
@@ -135,7 +135,7 @@ def _form_values(html):
                 result[name] = option["value"]
         elif field.get("type") == "checkbox":
             if field.has_attr("checked"):
-                result[name] = field.get("value", "y")
+                result[name] = field.get("value", "on")
         elif field.get("type") != "submit":
             result[name] = field.get("value", "")
     return result

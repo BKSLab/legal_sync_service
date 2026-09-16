@@ -45,7 +45,7 @@ class ProcessingResult(BaseModel):
     """Сводка одного запуска обработки очереди отправки."""
 
     delivery_disabled: bool = Field(
-        False, description="Отправка в RAG отключена настройкой RAG_DELIVERY_ENABLED.",
+        False, description="Отправка в RAG отключена в конфигурации сервиса.",
     )
     already_running: bool = Field(
         False, description="Очередь уже обрабатывается другим запуском.",

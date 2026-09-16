@@ -111,6 +111,7 @@ class PravoEbpiSettings(SettingsBase):
 class RagSettings(SettingsBase):
     """Настройки клиента RAG Service."""
 
+    # Начальное значение для БД. После инициализации меняется через админку.
     rag_delivery_enabled: bool = False
     rag_service_base_url: str = "http://localhost:8002"
     rag_service_api_key: SecretStr | None = None
@@ -118,7 +119,7 @@ class RagSettings(SettingsBase):
 
 
 class SchedulerSettings(SettingsBase):
-    """Настройки фонового планировщика."""
+    """Запуск планировщика и начальные значения его сохраняемой конфигурации."""
 
     scheduler_enabled: bool = True
     monitoring_cron_hour: str = "*"

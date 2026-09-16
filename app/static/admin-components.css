@@ -134,7 +134,16 @@ span.flatpickr-weekday,
 .admin-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .admin-login form { width: 100%; max-width: 420px; }
 
+.row-deck > .configuration-page { display: block; }
+.configuration-summary, .configuration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.configuration-toggle { display: flex; align-items: center; gap: 12px; font-weight: 600; cursor: pointer; }
+.configuration-toggle .form-check-input { margin: 0; flex: 0 0 auto; }
+.configuration-form .form-label { text-transform: none; letter-spacing: normal; font-size: 14px; }
+.configuration-address, .configuration-history { overflow-wrap: anywhere; }
+.configuration-history + .configuration-history { border-top: 1px solid var(--border); padding-top: 16px; }
+
 @media (max-width: 767px) {
+    .configuration-summary, .configuration-grid { grid-template-columns: minmax(0, 1fr); }
     .admin-brand { max-width: 180px; padding: 0; font-size: 14px; }
     .admin-logout { margin-top: 0; }
     .record-field { grid-template-columns: minmax(0, 1fr); gap: 6px; }

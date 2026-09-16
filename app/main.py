@@ -14,6 +14,7 @@ from app.background_tasks.scheduler import create_scheduler
 from app.core.config_logger import configure_logging
 from app.core.settings import get_settings
 from app.db.session import engine
+from app.services.configuration import load_configuration
 from app.utils.check_db import check_db_connection
 
 configure_logging()
@@ -29,12 +30,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🚀 Старт Legal Sync Service.")
     await check_db_connection()
     logger.info("✅ PostgreSQL доступен.")
+    configuration = await load_configuration()
+    logger.info("Конфигурация загружена: версия=%s, отправка в RAG=%s.", configuration.version, configuration.rag_delivery_enabled)
     global scheduler
     if settings.scheduler.scheduler_enabled:
-        scheduler = create_scheduler(
-            settings=settings.scheduler,
-            rag_delivery_enabled=settings.rag.rag_delivery_enabled,
-        )
+        scheduler = create_scheduler(configuration)
         scheduler.start()
         logger.info("✅ Планировщик запущен.")
     yield

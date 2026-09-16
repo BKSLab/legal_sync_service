@@ -2,12 +2,12 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.core.settings import get_settings
 from app.dependencies.clients import PravoEbpiClientDep, RagClientDep
 from app.dependencies.repositories import (
     LegalChangesRepositoryDep,
     TrackedDocumentsRepositoryDep,
 )
+from app.services.configuration import load_configuration
 from app.services.legal_changes import LegalChangesService
 from app.services.monitoring import MonitoringService
 from app.services.processing import ProcessingService
@@ -72,13 +72,11 @@ def get_processing_service(
 ) -> ProcessingService:
     """Фабрика сервиса отправки изменений в RAG Service."""
 
-    settings = get_settings()
     return ProcessingService(
         legal_changes_repository=legal_changes_repository,
         pravo_ebpi_client=pravo_ebpi_client,
         rag_client=rag_client,
-        max_retries=settings.scheduler.processing_max_retries,
-        delivery_enabled=settings.rag.rag_delivery_enabled,
+        configuration_provider=load_configuration,
     )
 
 

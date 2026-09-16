@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.admin.auth import AdminAuth
+from app.admin.configuration import ConfigurationView
 from app.admin.preview import ChangePreviewView
 from app.admin.views import (
     DashboardView,
@@ -49,5 +50,6 @@ def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
     admin.add_view(DashboardView)
     admin.add_view(TrackedDocumentAdmin)
     admin.add_view(LegalChangeAdmin)
+    admin.add_view(ConfigurationView)
     admin.add_view(ChangePreviewView)
     return admin

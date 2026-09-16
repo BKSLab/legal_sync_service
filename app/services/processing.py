@@ -1,18 +1,25 @@
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from app.clients.pravo_ebpi import PravoEbpiClient
 from app.clients.rag import RagClient
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
+from app.exceptions.configuration import ConfigurationUnavailableError
 from app.exceptions.legal_changes import LegalChangeRepositoryError
 from app.exceptions.rag import RagStaleRevisionError
 from app.exceptions.redaction import RedactionNotReadyError, RedactionParseError
 from app.repositories.legal_changes import LegalChangesRepository
+from app.schemas.configuration import ConfigurationValues
 from app.schemas.monitoring import ProcessingResult
 from app.services.redaction_parser import RedactionDocument
 from app.services.section_text import SectionTextService
 
 logger = logging.getLogger(__name__)
+
+
+class DeliveryPaused(Exception):
+    """Отправку отключили после начала извлечения статьи."""
 
 
 class ProcessingService:
@@ -29,8 +36,9 @@ class ProcessingService:
         legal_changes_repository: LegalChangesRepository,
         pravo_ebpi_client: PravoEbpiClient,
         rag_client: RagClient,
-        max_retries: int,
+        max_retries: int = 3,
         delivery_enabled: bool = False,
+        configuration_provider: Callable[[], Awaitable[ConfigurationValues]] | None = None,
     ):
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
@@ -38,6 +46,21 @@ class ProcessingService:
         self.rag_client = rag_client
         self.max_retries = max_retries
         self.delivery_enabled = delivery_enabled
+        self.configuration_provider = configuration_provider
+
+    async def _delivery_enabled(self) -> bool:
+        if self.configuration_provider is not None:
+            configuration = await self.configuration_provider()
+            self.delivery_enabled = configuration.rag_delivery_enabled
+            self.max_retries = configuration.processing_max_retries
+        return self.delivery_enabled
+
+    @staticmethod
+    def _disabled_result() -> ProcessingResult:
+        return ProcessingResult(
+            delivery_disabled=True, changes_selected=0, changes_sent=0,
+            changes_failed=0, changes_postponed=0,
+        )
 
     # Блок публичных методов
 
@@ -50,15 +73,9 @@ class ProcessingService:
             Сводка запуска.
         """
 
-        if not self.delivery_enabled:
+        if not await self._delivery_enabled():
             logger.info("Отправка в RAG отключена; очередь оставлена без изменений.")
-            return ProcessingResult(
-                delivery_disabled=True,
-                changes_selected=0,
-                changes_sent=0,
-                changes_failed=0,
-                changes_postponed=0,
-            )
+            return self._disabled_result()
 
         async with self.legal_changes_repository.processing_lock() as acquired:
             if not acquired:
@@ -70,6 +87,8 @@ class ProcessingService:
                     changes_postponed=0,
                     already_running=True,
                 )
+            if not await self._delivery_enabled():
+                return self._disabled_result()
             recovered = await self.legal_changes_repository.recover_interrupted_processing()
             result = await self._run_processing()
             result.changes_recovered = recovered
@@ -90,11 +109,23 @@ class ProcessingService:
         failed = 0
         postponed = 0
         superseded = 0
+        delivery_disabled = False
 
         for change in changes:
+            if not await self._delivery_enabled():
+                delivery_disabled = True
+                break
+            if change.retry_count >= self.max_retries:
+                continue
+            original_status = change.status
             try:
                 await self._process_change(change=change, parsed_redactions=parsed_redactions)
                 sent += 1
+            except DeliveryPaused:
+                await self.legal_changes_repository.update(change=change, values={"status": original_status})
+                logger.info("Отправка в RAG отключена во время извлечения; событие %s оставлено в очереди.", change.id)
+                delivery_disabled = True
+                break
             except RedactionNotReadyError as error:
                 # Событие уже переведено в `processing`, но отправки не было.
                 # Без возврата в `scheduled` оно выпало бы из выборки навсегда.
@@ -118,7 +149,7 @@ class ProcessingService:
                     },
                 )
                 superseded += 1
-            except LegalChangeRepositoryError:
+            except (LegalChangeRepositoryError, ConfigurationUnavailableError):
                 # При недоступной БД нельзя надёжно записать исход. Прерываем
                 # запуск; следующий владелец блокировки восстановит событие.
                 raise
@@ -137,6 +168,7 @@ class ProcessingService:
             superseded,
         )
         return ProcessingResult(
+            delivery_disabled=delivery_disabled,
             changes_selected=len(changes),
             changes_sent=sent,
             changes_failed=failed,
@@ -176,6 +208,10 @@ class ProcessingService:
         if revision_date is None:
             raise RedactionParseError(f"У события {change.id} не определена дата редакции.")
 
+        # Выключатель читается после потенциально долгого извлечения и перед
+        # каждым запросом в RAG. Уже выполняющийся HTTP-запрос не отменяем.
+        if not await self._delivery_enabled():
+            raise DeliveryPaused
         rag_response = await self.rag_client.update_section(
             document_id=document.document_id,
             section_number=change.section_number,

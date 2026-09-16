@@ -1,12 +1,16 @@
 {% extends "sqladmin/layout.html" %}
 {% block content %}
-{% if not rag_delivery_enabled %}
 <div class="col-12">
-  <div class="alert alert-info" role="status">
-    Отправка в RAG отключена. Найденные изменения сохраняются здесь для наблюдения и проверки.
+  <div class="alert {{ 'alert-info' if configuration else 'alert-warning' }}" role="status">
+    {% if configuration %}
+    {% if configuration.rag_delivery_enabled %}Отправка в RAG включена. Обрабатываются подтверждённые события, у которых наступил срок.
+    {% else %}Отправка в RAG отключена. Найденные изменения сохраняются здесь для наблюдения и проверки.{% endif %}
+    {% if not configuration.monitoring_enabled %}Автоматический мониторинг приостановлен.{% endif %}
+    {% if not scheduler_enabled %}Планировщик отключён на сервере.{% endif %}
+    {% else %}Не удалось прочитать конфигурацию. Состояние отправки неизвестно.{% endif %}
+    <a href="{{ url_for('admin:configuration') }}">Открыть конфигурацию</a>
   </div>
 </div>
-{% endif %}
 {% if not stats.postgres_ok %}
 <div class="col-12">
   <div class="alert alert-danger" role="alert">

@@ -1,8 +1,10 @@
 import json
+import logging
 from datetime import UTC, date, datetime
 
 from markupsafe import Markup, escape
 from sqladmin import BaseView, ModelView, expose
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from wtforms import SelectField
 
@@ -11,6 +13,10 @@ from app.admin.forms import AdminForm, AdminJSONField, UTCDateTimeField
 from app.core.settings import get_settings
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
 from app.db.models.tracked_documents import TrackedDocument
+from app.repositories.configuration import ConfigurationRepository
+from app.services.configuration import initial_configuration
+
+logger = logging.getLogger(__name__)
 
 _STATUS_STYLES = {
     LegalChangeStatus.DRAFT: ("orange", "Ожидает проверки"),
@@ -78,13 +84,20 @@ class DashboardView(BaseView):
 
     @expose("/dashboard", methods=["GET"])
     async def dashboard(self, request: Request):
+        configuration = None
         async with self._admin_ref.session_maker() as db_session:
             stats = await get_dashboard_stats(db_session)
+            if stats.postgres_ok:
+                try:
+                    configuration = await ConfigurationRepository(db_session).get_or_create(initial_configuration(get_settings()))
+                except (SQLAlchemyError, OSError):
+                    logger.exception("Не удалось прочитать конфигурацию для дашборда.")
         return await self.templates.TemplateResponse(
             request, "dashboard.html", {
                 "stats": stats,
                 "title": "Дашборд",
-                "rag_delivery_enabled": get_settings().rag.rag_delivery_enabled,
+                "configuration": configuration,
+                "scheduler_enabled": get_settings().scheduler.scheduler_enabled,
             },
         )
 
