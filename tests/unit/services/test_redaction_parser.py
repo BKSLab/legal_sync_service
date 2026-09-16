@@ -1,7 +1,8 @@
 import pytest
 from app.exceptions.redaction import RedactionParseError, RedactionSectionNotFoundError
+from app.schemas.pravo_ebpi import EbpiContentNode
 from app.services.redaction_parser import RedactionDocument
-from tests.conftest import FZ_246_CITATION, FZ_246_DOC_HASH
+from tests.conftest import FZ_246_CITATION, FZ_246_DOC_HASH, FZ_651_DOC_HASH
 
 
 @pytest.fixture
@@ -83,3 +84,72 @@ def test_broken_markup_raises_instead_of_partial_parse(redaction_content_nodes):
             redaction_html="<html><body><div>без абзацев</div></body></html>",
             content_nodes=redaction_content_nodes,
         )
+
+
+def test_staged_amendment_excludes_unchanged_article_with_old_marker(fz181_redaction_data):
+    old_html, old_nodes = fz181_redaction_data[486059]
+    new_html, new_nodes = fz181_redaction_data[444605]
+    previous = RedactionDocument(old_html, old_nodes)
+    current = RedactionDocument(new_html, new_nodes)
+
+    assert [section.number for section in current.find_sections_changed_by(FZ_651_DOC_HASH)] == ["1", "14"]
+    changed = current.find_sections_changed_by(FZ_651_DOC_HASH, previous_redaction=previous)
+
+    assert [section.number for section in changed] == ["14"]
+
+
+def test_unchanged_redaction_creates_no_article_changes(fz181_redaction_data):
+    html, nodes = fz181_redaction_data[444605]
+    previous = RedactionDocument(html, nodes)
+    current = RedactionDocument(html, nodes)
+
+    assert current.find_sections_changed_by(FZ_651_DOC_HASH, previous_redaction=previous) == []
+
+
+def test_comparison_ignores_whitespace_changes(fz181_redaction_data):
+    html, nodes = fz181_redaction_data[444605]
+    formatted_html = html.replace("Понятия инвалида", "Понятия \u00a0  инвалида")
+    assert formatted_html != html
+    previous = RedactionDocument(formatted_html, nodes)
+    current = RedactionDocument(html, nodes)
+
+    assert current.find_sections_changed_by(FZ_651_DOC_HASH, previous_redaction=previous) == []
+
+
+def test_articles_missing_from_previous_redaction_are_new(fz181_redaction_data):
+    html, nodes = fz181_redaction_data[444605]
+    previous = RedactionDocument(
+        '<p id="old">Статья 3. Общие положения</p>',
+        [EbpiContentNode.model_validate({
+            "id": "old", "caption": "Статья 3. Общие положения", "unit": "статья",
+            "np": "old", "npe": "old",
+        })],
+    )
+    current = RedactionDocument(html, nodes)
+
+    changed = current.find_sections_changed_by(FZ_651_DOC_HASH, previous_redaction=previous)
+
+    assert [section.number for section in changed] == ["1", "14"]
+
+
+def test_missing_end_uses_next_official_boundary_without_including_next_article():
+    document = RedactionDocument(
+        '<p id="start">Статья 1. Название</p><p id="body">Текст первой статьи.</p>'
+        '<p id="next">Статья 2. Другая статья</p><p id="end">Текст второй статьи.</p>',
+        [EbpiContentNode.model_validate(node) for node in [
+            {"id": "1", "caption": "Статья 1. Название", "unit": "статья", "lvl": 1, "np": "start", "npe": "missing"},
+            {"id": "2", "caption": "Статья 2. Другая статья", "unit": "статья", "lvl": 1, "np": "next", "npe": "end"},
+        ]],
+    )
+
+    assert document.extract_section_text("1") == "Статья 1. Название\nТекст первой статьи."
+
+
+def test_unreadable_previous_article_is_not_treated_as_new(fz181_redaction_data):
+    html, nodes = fz181_redaction_data[444605]
+    broken_nodes = [nodes[0].model_copy(update={"first_paragraph_id": "missing"}), nodes[1]]
+    previous = RedactionDocument(html, broken_nodes)
+    current = RedactionDocument(html, nodes)
+
+    with pytest.raises(RedactionParseError, match="границы статьи 1"):
+        current.find_sections_changed_by(FZ_651_DOC_HASH, previous_redaction=previous)

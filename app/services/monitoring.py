@@ -106,6 +106,11 @@ class MonitoringService:
         redactions = await self.pravo_ebpi_client.get_redactions(
             document_hash=document.ebpi_doc_hash,
         )
+        ordered = sorted(redactions, key=self._redaction_order)
+        previous_by_id = {
+            current.redaction_id: previous
+            for previous, current in zip(ordered, ordered[1:], strict=False)
+        }
         pending = await self._select_pending_redactions(document=document, redactions=redactions)
 
         changes_created = 0
@@ -123,9 +128,19 @@ class MonitoringService:
                 )
                 skipped_incomplete += 1
                 continue
+            previous = previous_by_id.get(redaction.redaction_id)
+            if previous is not None and not previous.is_completed:
+                logger.warning(
+                    "⚠️ Предыдущая редакция ещё не готова для сравнения, отложено. "
+                    "document_id=%s redaction_id=%s previous_redaction_id=%s",
+                    document.document_id, redaction.redaction_id, previous.redaction_id,
+                )
+                skipped_incomplete += 1
+                continue
             changes_created += await self._create_changes_for_redaction(
                 document=document,
                 redaction=redaction,
+                previous_redaction=previous,
             )
 
         return MonitoringDocumentResult(
@@ -204,13 +219,25 @@ class MonitoringService:
             and redaction.redaction_date >= document.monitor_from
             and redaction.redaction_id not in known_ids
         ]
-        pending.sort(key=lambda redaction: redaction.redaction_date)
+        pending.sort(key=self._redaction_order)
         return pending
+
+    @staticmethod
+    def _redaction_order(redaction: EbpiRedaction) -> tuple[date, int]:
+        """Дата и порядковый номер портала задают последовательность редакций.
+
+        У нескольких редакций может совпадать дата. Числовой redid не задаёт
+        хронологию: будущую редакцию портал может подготовить заранее.
+        """
+
+        position = re.match(r"^\s*(\d+)\.", redaction.caption or "")
+        return redaction.redaction_date, int(position.group(1)) if position else 0
 
     async def _create_changes_for_redaction(
         self,
         document: TrackedDocument,
         redaction: EbpiRedaction,
+        previous_redaction: EbpiRedaction | None = None,
     ) -> int:
         """Создаёт события изменений по одной редакции документа."""
 
@@ -234,21 +261,26 @@ class MonitoringService:
             )
             return 0
 
-        # Вид акта-поправки берётся из его карточки: подпись редакции содержит
-        # только номер и дату, а выводить вид из номера означало бы угадывать.
-        amending_act = await self._get_amending_act(document_hash=amending_hash)
-
+        previous_document = (
+            await self._build_redaction_document(redaction_id=previous_redaction.redaction_id)
+            if previous_redaction is not None else None
+        )
         changed_sections = parsed_redaction.find_sections_changed_by(
             amending_document_hash=amending_hash,
+            previous_redaction=previous_document,
         )
         if not changed_sections:
-            logger.warning(
-                "⚠️ Изменённых статей не найдено. document_id=%s redaction_id=%s акт=%s",
+            logger.info(
+                "ℹ️ Новых изменений текста статей не найдено. document_id=%s redaction_id=%s акт=%s",
                 document.document_id,
                 redaction.redaction_id,
                 citation,
             )
             return 0
+
+        # Вид акта-поправки берётся из его карточки: подпись редакции содержит
+        # только номер и дату, а выводить вид из номера означало бы угадывать.
+        amending_act = await self._get_amending_act(document_hash=amending_hash)
 
         changes = []
         for section in changed_sections:

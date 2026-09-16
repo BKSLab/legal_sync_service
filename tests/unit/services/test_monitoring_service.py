@@ -12,7 +12,7 @@ from app.repositories.legal_changes import LegalChangesRepository
 from app.repositories.tracked_documents import TrackedDocumentsRepository
 from app.schemas.pravo_ebpi import EbpiDocumentCard, EbpiRedaction, EbpiSearchResult
 from app.services.monitoring import MonitoringService
-from tests.conftest import FZ_246_DOC_HASH, TK_RF_DOC_HASH, TK_RF_REDACTION_ID
+from tests.conftest import FZ_246_DOC_HASH, FZ_651_DOC_HASH, TK_RF_DOC_HASH, TK_RF_REDACTION_ID
 
 
 def _tracked_document(**overrides):
@@ -320,3 +320,88 @@ async def test_missing_document_in_bank_is_reported(redaction_html, redaction_co
 
     assert result.documents_failed == 1
     assert "197-ФЗ" in result.items[0].error
+
+
+def _build_staged_amendment_service(fz181_redaction_data, **previous_overrides):
+    current = _redaction(
+        redid=444605, reddate="20270901",
+        redcaption="82. на 01.09.2027 (№ 651-ФЗ от 25.12.2023)",
+    )
+    previous = _redaction(**{
+        "redid": 486059, "reddate": "20260901",
+        "redcaption": "81. с 01.09.2026 (№ 552-ФЗ от 29.12.2025)",
+        **previous_overrides,
+    })
+    current_html, current_nodes = fz181_redaction_data[current.redaction_id]
+    old_html, old_nodes = fz181_redaction_data[486059]
+    service, _, repository, client = _build_service(
+        current_html, current_nodes, [current, previous],
+        document=_tracked_document(monitor_from=date(2026, 9, 16)),
+    )
+    content = {
+        current.redaction_id: (current_html, current_nodes),
+        previous.redaction_id: (old_html, old_nodes),
+    }
+    client.get_redaction_text.side_effect = lambda redaction_id: content[redaction_id][0]
+    client.get_redaction_content.side_effect = lambda redaction_id: content[redaction_id][1]
+    client.get_document_card_by_hash.return_value = EbpiDocumentCard.model_validate({
+        "docid": 300554, "dochash": FZ_651_DOC_HASH,
+        "adoptions": [{"type": "Федеральный закон", "onumber": "651-ФЗ", "odate": "25.12.2023"}],
+    })
+    return service, repository, client
+
+
+async def test_monitoring_compares_against_redaction_before_monitor_from(fz181_redaction_data):
+    service, repository, _ = _build_staged_amendment_service(fz181_redaction_data)
+
+    result = await service.run_monitoring()
+
+    assert result.documents_failed == 0
+    assert result.changes_created == 1
+    saved = repository.save_redaction_changes.await_args.kwargs["data"]
+    assert [item.section_number for item in saved] == ["14"]
+    assert saved[0].effective_date == date(2027, 9, 1)
+    assert saved[0].amending_doc_hash == FZ_651_DOC_HASH
+
+
+async def test_same_day_redactions_follow_portal_order_not_database_id(fz181_redaction_data):
+    service, repository, _ = _build_staged_amendment_service(
+        fz181_redaction_data, redid=999999, reddate="20270901",
+    )
+    repository.get_known_redaction_ids.return_value = {999999}
+
+    result = await service.run_monitoring()
+
+    assert result.changes_created == 1
+    saved = repository.save_redaction_changes.await_args.kwargs["data"]
+    assert [item.section_number for item in saved] == ["14"]
+
+
+async def test_incomplete_previous_redaction_defers_comparison(fz181_redaction_data):
+    service, repository, client = _build_staged_amendment_service(
+        fz181_redaction_data, redcompleted=False,
+    )
+
+    result = await service.run_monitoring()
+
+    assert result.changes_created == 0
+    assert result.items[0].redactions_skipped_incomplete == 1
+    client.get_redaction_text.assert_not_awaited()
+    repository.save_redaction_changes.assert_not_awaited()
+
+
+async def test_unavailable_previous_redaction_reports_error_without_saving(fz181_redaction_data):
+    service, repository, client = _build_staged_amendment_service(fz181_redaction_data)
+
+    def get_text(redaction_id):
+        if redaction_id == 486059:
+            raise PravoEbpiRequestError("Предыдущая редакция недоступна")
+        return fz181_redaction_data[redaction_id][0]
+
+    client.get_redaction_text.side_effect = get_text
+
+    result = await service.run_monitoring()
+
+    assert result.documents_failed == 1
+    assert result.changes_created == 0
+    repository.save_redaction_changes.assert_not_awaited()

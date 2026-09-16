@@ -43,6 +43,7 @@ class RedactionDocument:
             for position, (paragraph_id, _) in enumerate(self.paragraphs)
             if paragraph_id
         }
+        self._invalid_sections: set[str] = set()
         self.sections = self._collect_sections(content_nodes=content_nodes)
         self._section_starts = [section.first_paragraph_position for section in self.sections]
         logger.info(
@@ -53,16 +54,22 @@ class RedactionDocument:
 
     # Блок публичных методов
 
-    def find_sections_changed_by(self, amending_document_hash: str) -> list[RedactionSection]:
+    def find_sections_changed_by(
+        self,
+        amending_document_hash: str,
+        previous_redaction: "RedactionDocument | None" = None,
+    ) -> list[RedactionSection]:
         """Находит статьи, изменённые конкретным актом-поправкой.
 
         Портал помечает каждый изменённый абзац ссылкой на акт-поправку с его
         идентификатором `gohash`. Сопоставление идёт только по этому
-        идентификатору: номер закона повторяется в разные годы, поэтому по
-        номеру статьи определяются неверно.
+        идентификатору: номер закона повторяется в разные годы. Ссылки на уже
+        действующие поправки сохраняются и в следующих редакциях, поэтому
+        при наличии предыдущей редакции дополнительно сравнивается текст.
 
         Args:
             amending_document_hash: Идентификатор акта-поправки в банке редакций.
+            previous_redaction: Предыдущая редакция для исключения старых отметок.
 
         Returns:
             Список изменённых статей в порядке следования в документе.
@@ -94,6 +101,13 @@ class RedactionDocument:
                     )
                 continue
             changed_sections.setdefault(section.number, section)
+
+        if previous_redaction is not None:
+            changed_sections = {
+                number: section
+                for number, section in changed_sections.items()
+                if self._section_text_changed(number, previous_redaction)
+            }
 
         logger.info(
             "✅ Изменённых статей найдено: %s. hash=%s",
@@ -171,12 +185,28 @@ class RedactionDocument:
             RedactionSectionNotFoundError: Статьи нет в этой редакции.
         """
 
+        if section_number in self._invalid_sections:
+            raise RedactionParseError(f"Не удалось определить границы статьи {section_number}.")
         for section in self.sections:
             if section.number == section_number:
                 return section
         raise RedactionSectionNotFoundError(section_number=section_number)
 
     # Блок приватных методов разбора
+
+    def _section_text_changed(
+        self, section_number: str, previous_redaction: "RedactionDocument",
+    ) -> bool:
+        """Отличает новое изменение от сохранившейся ссылки на старую поправку."""
+
+        current_text = self.extract_section_text(section_number)
+        try:
+            previous_redaction.get_section(section_number)
+        except RedactionSectionNotFoundError:
+            # Статьи, добавленные в этой редакции, тоже создают события.
+            return True
+        previous_text = previous_redaction.extract_section_text(section_number)
+        return self._normalize_whitespace(current_text) != self._normalize_whitespace(previous_text)
 
     def _collect_paragraphs(self) -> list[tuple[str | None, Tag]]:
         """Собирает абзацы редакции в порядке следования в документе."""
@@ -201,7 +231,25 @@ class RedactionDocument:
             number, title = parsed
             first = self.paragraph_index.get(node.first_paragraph_id or "")
             last = self.paragraph_index.get(node.last_paragraph_id or "")
+            if first is not None and last is None:
+                # В редакции ТК РФ 492286 оглавление статьи 58 ссылается на
+                # отсутствующий p64684. Начало следующей единицы того же или
+                # более высокого уровня остаётся надёжной границей статьи.
+                next_positions = [
+                    position
+                    for other in content_nodes
+                    if other.level <= node.level
+                    and (position := self.paragraph_index.get(other.first_paragraph_id or "")) is not None
+                    and position > first
+                ]
+                if next_positions:
+                    last = min(next_positions) - 1
+                    logger.warning(
+                        "⚠️ Конец статьи отсутствует в HTML; использована следующая граница оглавления. "
+                        "number=%s npe=%s", number, node.last_paragraph_id,
+                    )
             if first is None or last is None or last < first:
+                self._invalid_sections.add(number)
                 logger.warning(
                     "⚠️ Границы статьи не найдены в HTML. number=%s np=%s npe=%s",
                     number,
