@@ -1,0 +1,39 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Событие №{{ change.id }} · Статья {{ change.section_number }}</h3>
+    </div>
+    <div class="card-body">
+      <p>{{ change.tracked_document.short_name }}</p>
+      <p>Проверка загрузит редакцию события и сохранит извлечённую статью в его карточке.
+        Условная дата действует только для этой проверки. Отправка в RAG не выполняется.</p>
+      <p>Статус события: {{ change.status | change_status }}.
+        Подтверждение и расписание события сохраняются.</p>
+      {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+      <form method="post" action="{{ url_for('admin:preview_change', change_id=change.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="mb-3">
+          <label class="form-label" for="as_of">Считать, что наступили дата и время (UTC)</label>
+          <input class="form-control" style="max-width:360px" id="as_of" name="as_of"
+            type="datetime-local" step="1" value="{{ as_of }}" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Проверить извлечение</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin:details', identity='legal-change', pk=change.id) }}">
+          Карточка события
+        </a>
+      </form>
+      {% if result %}
+      <div class="alert {{ 'alert-success' if result.outcome == 'extracted' else 'alert-info' }} mt-3" role="status">
+        {{ result.message }}
+      </div>
+      {% if result.outcome == 'extracted' %}
+      <p>{{ result.consolidated_text_source }} · {{ result.text_length }} символов</p>
+      <pre style="white-space:pre-wrap;word-break:break-word;">{{ result.consolidated_text }}</pre>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "sqladmin/details.html" %}
+{% block content %}
+{% if model.status.value in ['draft', 'approved', 'scheduled', 'failed'] %}
+<div class="col-12 mb-3">
+  <a class="btn btn-primary" href="{{ url_for('admin:preview_change', change_id=model.id) }}">
+    Проверить извлечение статьи
+  </a>
+</div>
+{% endif %}
+{{ super() }}
+{% endblock %}

@@ -1,6 +1,16 @@
 from fastapi import status
 
 
+class LegalChangePreviewConflictError(Exception):
+    """Пробный запуск невозможен в текущем состоянии очереди или события."""
+
+    status_code = status.HTTP_409_CONFLICT
+
+    def __init__(self, detail: str):
+        self.detail = detail
+        super().__init__(detail)
+
+
 class LegalChangeServiceError(Exception):
     """Базовое исключение сервиса событий изменений."""
 

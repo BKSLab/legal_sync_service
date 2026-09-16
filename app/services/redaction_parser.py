@@ -148,7 +148,8 @@ class RedactionDocument:
         """Извлекает полный текст статьи из редакции.
 
         Текст не переформулируется и не сокращается: абзацы берутся как есть,
-        нормализуются только пробельные символы.
+        нормализуются пробельные символы и надстрочный номер в заголовке
+        (например, 15¹ → 15.1 по официальному оглавлению).
 
         Args:
             section_number: Номер статьи, например `59` или `60.1`.
@@ -167,6 +168,15 @@ class RedactionDocument:
         ]:
             line = self._normalize_whitespace(paragraph.get_text(" ", strip=True))
             if line:
+                if not lines and "." in section.number:
+                    # После удаления HTML надстрочный индекс становится
+                    # отдельным числом: «Статья 15 1 .». Нормализуем только
+                    # заголовок выбранной статьи, не ссылки в её тексте.
+                    number_pattern = r"\s+".join(re.escape(part) for part in section.number.split("."))
+                    line = re.sub(
+                        rf"^Статья\s+{number_pattern}\s*\.",
+                        f"Статья {section.number}.", line, count=1,
+                    )
                 lines.append(line)
         if not lines:
             raise RedactionSectionNotFoundError(section_number=section_number)

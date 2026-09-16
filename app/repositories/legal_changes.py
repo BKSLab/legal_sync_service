@@ -183,7 +183,9 @@ class LegalChangesRepository:
 
         try:
             result = await self.db_session.execute(
-                select(LegalChange).where(LegalChange.id == change_id)
+                select(LegalChange)
+                .options(joinedload(LegalChange.tracked_document))
+                .where(LegalChange.id == change_id)
             )
             return result.scalar_one_or_none()
         except SQLAlchemyError as error:
@@ -219,6 +221,33 @@ class LegalChangesRepository:
             result = await self.db_session.execute(stmt)
             return int(result.scalar_one())
         except SQLAlchemyError as error:
+            raise LegalChangeRepositoryError(str(error)) from error
+
+    async def save_preview_text(
+        self, change: LegalChange, extracted_text: str, source: str,
+    ) -> bool:
+        """Сохраняет текст, только если событие не изменилось во время загрузки."""
+
+        try:
+            result = await self.db_session.execute(
+                update(LegalChange)
+                .where(
+                    LegalChange.id == change.id,
+                    LegalChange.updated_at == change.updated_at,
+                    LegalChange.status.in_([
+                        LegalChangeStatus.DRAFT, LegalChangeStatus.APPROVED,
+                        LegalChangeStatus.SCHEDULED, LegalChangeStatus.FAILED,
+                    ]),
+                )
+                .values(consolidated_text=extracted_text, consolidated_text_source=source)
+                .returning(LegalChange.id)
+                .execution_options(synchronize_session=False)
+            )
+            saved = result.scalar_one_or_none() is not None
+            await self.db_session.commit()
+            return saved
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
             raise LegalChangeRepositoryError(str(error)) from error
 
     async def update(self, change: LegalChange, values: dict) -> LegalChange:

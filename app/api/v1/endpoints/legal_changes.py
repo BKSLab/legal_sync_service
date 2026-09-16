@@ -5,12 +5,16 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 
 from app.db.models.legal_changes import LegalChangeStatus
 from app.dependencies.auth import VerifyApiKeyDep
-from app.dependencies.services import LegalChangesServiceDep
+from app.dependencies.services import LegalChangesServiceDep, ProcessingPreviewServiceDep
 from app.exceptions.legal_changes import (
     LegalChangeInvalidStatusError,
     LegalChangeNotFoundError,
+    LegalChangePreviewConflictError,
+    LegalChangeRepositoryError,
     LegalChangeServiceError,
 )
+from app.exceptions.pravo_ebpi import PravoEbpiClientError
+from app.exceptions.redaction import RedactionParseError, RedactionSectionNotFoundError
 from app.exceptions.tracked_documents import TrackedDocumentNotFoundError
 from app.schemas.legal_changes import (
     LegalChangeCreateRequest,
@@ -18,6 +22,7 @@ from app.schemas.legal_changes import (
     LegalChangeSchema,
     LegalChangesListSchema,
 )
+from app.schemas.processing_preview import ProcessingPreviewRequest, ProcessingPreviewResult
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/legal-changes", tags=["legal-changes"])
@@ -103,6 +108,45 @@ async def get_legal_change(
     except (LegalChangeNotFoundError, LegalChangeServiceError) as error:
         logger.exception("❌ Ошибка получения события: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+
+
+@router.post(
+    path="/{change_id}/preview",
+    response_model=ProcessingPreviewResult,
+    summary="Проверить извлечение статьи на условную дату",
+    description=(
+        "Проверяет срок одного события относительно as_of и загружает именно его редакцию. "
+        "Сохраняет извлечённую статью в consolidated_text, источник — в consolidated_text_source. "
+        "Работает с draft без подтверждения: статус, реальные даты и попытки отправки не меняются. "
+        "RAG не вызывается при любом значении RAG_DELIVERY_ENABLED. Это проверка извлечения, "
+        "а не запуск планировщика или отправки."
+    ),
+    operation_id="previewLegalChange",
+    responses={
+        404: {"description": "Событие или статья не найдены."},
+        409: {"description": "Очередь занята либо состояние события не допускает проверку."},
+        502: {"description": "Не удалось получить или разобрать редакцию."},
+    },
+)
+async def preview_legal_change(
+    change_id: Annotated[int, Path(ge=1, description="ID события изменения.")],
+    data: ProcessingPreviewRequest,
+    service: ProcessingPreviewServiceDep,
+    _: VerifyApiKeyDep,
+) -> ProcessingPreviewResult:
+    """Выполняет пробное извлечение статьи без отправки в RAG."""
+
+    try:
+        return await service.preview_change(change_id, data)
+    except (
+        LegalChangeNotFoundError, LegalChangePreviewConflictError,
+        PravoEbpiClientError, RedactionParseError, RedactionSectionNotFoundError,
+    ) as error:
+        logger.warning("Пробное извлечение не выполнено. change_id=%s причина=%s", change_id, error)
+        raise HTTPException(status_code=error.status_code, detail=error.detail) from error
+    except LegalChangeRepositoryError as error:
+        logger.exception("Ошибка сохранения пробного извлечения. change_id=%s", change_id)
+        raise HTTPException(status_code=500, detail="Не удалось сохранить результат проверки.") from error
 
 
 @router.post(

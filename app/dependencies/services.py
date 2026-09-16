@@ -11,6 +11,8 @@ from app.dependencies.repositories import (
 from app.services.legal_changes import LegalChangesService
 from app.services.monitoring import MonitoringService
 from app.services.processing import ProcessingService
+from app.services.processing_preview import ProcessingPreviewService
+from app.services.section_text import SectionTextService
 from app.services.tracked_documents import TrackedDocumentsService
 
 
@@ -81,3 +83,17 @@ def get_processing_service(
 
 
 ProcessingServiceDep = Annotated[ProcessingService, Depends(get_processing_service)]
+
+
+def get_processing_preview_service(
+    repository: LegalChangesRepositoryDep,
+    pravo_ebpi_client: PravoEbpiClientDep,
+) -> ProcessingPreviewService:
+    """Пробное извлечение не создаёт клиента RAG."""
+
+    return ProcessingPreviewService(repository, SectionTextService(pravo_ebpi_client))
+
+
+ProcessingPreviewServiceDep = Annotated[
+    ProcessingPreviewService, Depends(get_processing_preview_service),
+]

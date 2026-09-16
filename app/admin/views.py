@@ -100,6 +100,7 @@ class LegalChangeAdmin(ModelView, model=LegalChange):
     name = "Событие"
     name_plural = "События изменений"
     icon = "fa-solid fa-clock-rotate-left"
+    details_template = "legal_change_details.html"
     column_list = [
         LegalChange.id,
         LegalChange.tracked_document_id,

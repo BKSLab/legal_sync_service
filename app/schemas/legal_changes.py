@@ -155,7 +155,7 @@ class LegalChangeSchema(BaseModel):
     delta_text: str | None = Field(None, description="Фрагмент текста акта-поправки.", examples=[None])
     consolidated_text: str | None = Field(
         None,
-        description="Текст статьи из редакции, отправленный в RAG Service.",
+        description="Текст статьи, извлечённый при пробной обработке или отправке. Факт отправки — sent_at.",
         examples=["Статья 59. Срочный трудовой договор\nСрочный трудовой договор заключается: ..."],
     )
     consolidated_text_source: str | None = Field(

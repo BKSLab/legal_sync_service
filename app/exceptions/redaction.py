@@ -1,6 +1,10 @@
 from fastapi import status
 
 
+class RedactionNotReadyError(Exception):
+    """Портал ещё готовит редакцию; извлечение нужно отложить."""
+
+
 class RedactionParseError(Exception):
     """Редакцию не удалось разобрать.
 

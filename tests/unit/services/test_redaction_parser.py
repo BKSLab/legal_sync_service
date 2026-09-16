@@ -31,6 +31,10 @@ def test_superscript_article_number_is_normalized(document):
 
     section = document.get_section(section_number="60.1")
     assert section.title == "Работа по совместительству"
+    text = document.extract_section_text(section_number="60.1")
+    assert text.startswith("Статья 60.1. Работа по совместительству")
+    assert "Статья 60 2 ." not in text
+    assert "Статья 60.2." not in text
 
 
 def test_finds_amending_document_hash_by_citation(document):

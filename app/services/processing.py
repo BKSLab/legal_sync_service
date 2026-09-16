@@ -1,5 +1,3 @@
-import asyncio
-import functools
 import logging
 from datetime import UTC, datetime
 
@@ -8,10 +6,11 @@ from app.clients.rag import RagClient
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
 from app.exceptions.legal_changes import LegalChangeRepositoryError
 from app.exceptions.rag import RagStaleRevisionError
-from app.exceptions.redaction import RedactionParseError
+from app.exceptions.redaction import RedactionNotReadyError, RedactionParseError
 from app.repositories.legal_changes import LegalChangesRepository
 from app.schemas.monitoring import ProcessingResult
 from app.services.redaction_parser import RedactionDocument
+from app.services.section_text import SectionTextService
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +34,7 @@ class ProcessingService:
     ):
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
+        self.section_text = SectionTextService(pravo_ebpi_client)
         self.rag_client = rag_client
         self.max_retries = max_retries
         self.delivery_enabled = delivery_enabled
@@ -95,7 +95,7 @@ class ProcessingService:
             try:
                 await self._process_change(change=change, parsed_redactions=parsed_redactions)
                 sent += 1
-            except _RedactionNotReadyError as error:
+            except RedactionNotReadyError as error:
                 # Событие уже переведено в `processing`, но отправки не было.
                 # Без возврата в `scheduled` оно выпало бы из выборки навсегда.
                 logger.warning(
@@ -167,7 +167,7 @@ class ProcessingService:
             values={"status": LegalChangeStatus.PROCESSING},
         )
 
-        redaction_text = await self._get_section_text(
+        redaction_text = await self.section_text.get_text(
             change=change,
             document_hash=document.ebpi_doc_hash,
             parsed_redactions=parsed_redactions,
@@ -196,68 +196,13 @@ class ProcessingService:
             values={
                 "status": LegalChangeStatus.SENT,
                 "consolidated_text": redaction_text,
-                "consolidated_text_source": self._build_source_reference(change=change),
+                "consolidated_text_source": self.section_text.source_reference(change=change),
                 "sent_at": datetime.now(tz=UTC),
                 "rag_response": rag_response,
                 "last_error": None,
             },
         )
         logger.info("✅ Событие отправлено в RAG. change_id=%s", change.id)
-
-    async def _get_section_text(
-        self,
-        change: LegalChange,
-        document_hash: str | None,
-        parsed_redactions: dict[int, RedactionDocument],
-    ) -> str:
-        """Извлекает текст статьи из нужной редакции документа."""
-
-        if change.ebpi_redaction_id is None:
-            raise RedactionParseError(
-                f"У события {change.id} не указана редакция документа."
-            )
-
-        parsed = parsed_redactions.get(change.ebpi_redaction_id)
-        if parsed is None:
-            await self._ensure_redaction_ready(change=change, document_hash=document_hash)
-            parsed = await self._build_redaction_document(redaction_id=change.ebpi_redaction_id)
-            parsed_redactions[change.ebpi_redaction_id] = parsed
-        return parsed.extract_section_text(section_number=change.section_number)
-
-    async def _ensure_redaction_ready(self, change: LegalChange, document_hash: str | None) -> None:
-        """Проверяет, что портал завершил подготовку текста редакции.
-
-        Незавершённая редакция отдаётся порталом частично. Отправить такой
-        текст в RAG хуже, чем опоздать: подмену полного текста статьи
-        обрезанным потом никто не заметит.
-        """
-
-        if not document_hash:
-            return
-        redactions = await self.pravo_ebpi_client.get_redactions(document_hash=document_hash)
-        for redaction in redactions:
-            if redaction.redaction_id != change.ebpi_redaction_id:
-                continue
-            if not redaction.is_completed:
-                raise _RedactionNotReadyError(
-                    f"текст редакции {redaction.redaction_id} ещё готовится порталом"
-                )
-            return
-
-    async def _build_redaction_document(self, redaction_id: int) -> RedactionDocument:
-        """Загружает и разбирает редакцию вне event loop."""
-
-        redaction_html = await self.pravo_ebpi_client.get_redaction_text(redaction_id=redaction_id)
-        content_nodes = await self.pravo_ebpi_client.get_redaction_content(redaction_id=redaction_id)
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            functools.partial(
-                RedactionDocument,
-                redaction_html=redaction_html,
-                content_nodes=content_nodes,
-            ),
-        )
 
     async def _mark_failed(self, change: LegalChange, error: Exception) -> None:
         """Переводит событие в статус ошибки и сохраняет причину."""
@@ -278,20 +223,3 @@ class ProcessingService:
                 "last_error": str(error)[:2000],
             },
         )
-
-    @staticmethod
-    def _build_source_reference(change: LegalChange) -> str:
-        """Формирует ссылку на источник консолидированного текста."""
-
-        return (
-            "actual.pravo.gov.ru: редакция "
-            f"{change.ebpi_redaction_id} от {change.redaction_date}"
-        )
-
-
-class _RedactionNotReadyError(Exception):
-    """Портал ещё не завершил подготовку текста редакции.
-
-    Это не отказ, а причина отложить отправку: следующий запуск повторит
-    попытку, а счётчик неудач события не растёт.
-    """

@@ -1,13 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
-from types import SimpleNamespace
 
-import pytest
-from app.admin import create_admin
 from app.admin.dashboard import get_dashboard_stats
-from app.core.settings import AdminSettings, RagSettings
 from app.db.models import LegalChange, LegalChangeStatus, TrackedDocument
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
 
 
 async def seed_admin_data(session_factory):
@@ -50,24 +44,6 @@ async def seed_admin_data(session_factory):
                 consolidated_text="Статья 62. Условия трудового договора\nТекст принятой редакции." if sent else None,
             ))
         await session.commit()
-
-
-@pytest.fixture
-async def admin_client(session_factory, monkeypatch):
-    settings = SimpleNamespace(
-        admin=AdminSettings(
-            _env_file=None, secret_key="admin-test-session-secret",
-            admin_login="operator", admin_password="test-admin-password",
-        ),
-        rag=RagSettings(_env_file=None, rag_delivery_enabled=False),
-    )
-    monkeypatch.setattr("app.admin.get_settings", lambda: settings)
-    monkeypatch.setattr("app.admin.auth.get_settings", lambda: settings)
-    monkeypatch.setattr("app.admin.views.get_settings", lambda: settings)
-    app = FastAPI()
-    create_admin(app, session_factory.kw["bind"])
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield client
 
 
 async def test_dashboard_reports_queue_and_recent_deliveries(session_factory):
