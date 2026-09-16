@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
+from app.db.models.monitoring import MonitoringLogEntry, MonitoringRun
 from app.db.models.tracked_documents import TrackedDocument
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class DashboardStats:
     changes_sent_recent: int = 0
     last_sent_at: datetime | None = None
     recent_changes: list[RecentChange] = field(default_factory=list)
+    last_monitoring: MonitoringRun | None = None
+    last_monitoring_stage: str | None = None
+    monitoring_failed_recent: int = 0
 
 
 async def get_dashboard_stats(db_session: AsyncSession) -> DashboardStats:
@@ -82,6 +86,20 @@ async def get_dashboard_stats(db_session: AsyncSession) -> DashboardStats:
             .limit(8),
         )
         stats.recent_changes = [RecentChange(**row) for row in rows.mappings()]
+        # Пропуск второго воркера не подменяет результат настоящей проверки.
+        stats.last_monitoring = await db_session.scalar(select(MonitoringRun).where(
+            MonitoringRun.status != "skipped",
+        ).order_by(MonitoringRun.id.desc()).limit(1))
+        if stats.last_monitoring is not None:
+            # Инициализация конфигурации ниже может сделать commit в этой же
+            # SQLAdmin-сессии с expire_on_commit=True. Сводка уже прочитана.
+            db_session.expunge(stats.last_monitoring)
+            stats.last_monitoring_stage = await db_session.scalar(select(MonitoringLogEntry.message).where(
+                MonitoringLogEntry.run_id == stats.last_monitoring.id,
+            ).order_by(MonitoringLogEntry.id.desc()).limit(1))
+        stats.monitoring_failed_recent = await db_session.scalar(select(func.count()).select_from(MonitoringRun).where(
+            MonitoringRun.status.in_(["failed", "interrupted"]), MonitoringRun.started_at >= recent_since,
+        ))
         stats.postgres_ok = True
     except (SQLAlchemyError, OSError):
         logger.exception("Не удалось получить сводку для админки Legal Sync.")

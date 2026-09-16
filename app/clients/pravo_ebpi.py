@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -60,6 +62,7 @@ class PravoEbpiClient:
     def __init__(self, httpx_client: httpx.AsyncClient, settings: PravoEbpiSettings):
         self.httpx_client = httpx_client
         self.settings = settings
+        self.request_observer: Callable[..., Awaitable[None]] | None = None
         # Портал официальный и небыстрый: параллельные запросы к нему
         # ограничиваем, чтобы мониторинг десятка документов не выглядел
         # для него всплеском нагрузки.
@@ -319,6 +322,10 @@ class PravoEbpiClient:
         last_error = ""
 
         for attempt in range(1, self.settings.pravo_ebpi_max_retries + 1):
+            details = {"path": path, "parameters": request_params, "attempt": attempt}
+            if self.request_observer:
+                await self.request_observer("http_request", "Запрос к банку редакций.", details)
+            started = time.monotonic()
             try:
                 async with self.semaphore:
                     response = await self.httpx_client.get(
@@ -326,6 +333,9 @@ class PravoEbpiClient:
                         params=request_params,
                         timeout=self.settings.pravo_ebpi_timeout_seconds,
                     )
+                details = {**details, "status_code": response.status_code, "duration_ms": round((time.monotonic() - started) * 1000)}
+                if self.request_observer:
+                    await self.request_observer("http_response", f"Портал ответил HTTP {response.status_code}.", details)
                 if response.status_code >= 500:
                     last_error = f"HTTP {response.status_code}"
                 else:
@@ -337,8 +347,16 @@ class PravoEbpiClient:
                 ) from error
             except (httpx.TimeoutException, httpx.TransportError) as error:
                 last_error = f"{type(error).__name__}: {error}"
+                if self.request_observer:
+                    await self.request_observer("http_error", "Сетевая ошибка запроса к порталу.", {
+                        **details, "duration_ms": round((time.monotonic() - started) * 1000), "error": last_error,
+                    }, "warning")
 
             if attempt < self.settings.pravo_ebpi_max_retries:
+                if self.request_observer:
+                    await self.request_observer("http_retry", "Запрос будет повторён после задержки.", {
+                        **details, "reason": last_error, "delay_seconds": self.settings.pravo_ebpi_retry_delay_seconds,
+                    }, "warning")
                 logger.warning(
                     "🔄 Повтор запроса к банку редакций. path=%s попытка=%s причина=%s",
                     path,

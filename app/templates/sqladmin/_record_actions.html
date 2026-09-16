@@ -1,5 +1,8 @@
 <div class="admin-actions">
   <a class="btn btn-outline-secondary" href="{{ url_for('admin:list', identity=model_view.identity) }}">К списку</a>
+  {% if model_view.identity == 'tracked-document' %}
+  <a class="btn btn-outline-secondary" href="{{ url_for('admin:monitoring_log').include_query_params(document=model.document_id) }}">История проверок</a>
+  {% endif %}
   {% if model_view.can_edit %}
   <a class="btn btn-primary" href="{{ model_view._build_url_for('admin:edit', request, model) }}">Редактировать</a>
   {% endif %}

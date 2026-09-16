@@ -20,6 +20,20 @@
 {% endif %}
 
 <div class="col-12">
+  <div class="card mb-3">
+    <div class="card-header admin-toolbar"><h3 class="card-title">Последняя проверка документов</h3><a class="btn btn-outline-secondary" href="{{ url_for('admin:monitoring_log') }}">Журнал мониторинга</a></div>
+    <div class="card-body">
+      {% if stats.last_monitoring %}{% set run = stats.last_monitoring %}
+      <p><a href="{{ url_for('admin:monitoring_run', run_id=run.id) }}">Запуск №{{ run.id }}</a> · {{ run.started_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · {{ run.status | monitoring_status }}</p>
+      <p>Проверено документов: {{ run.documents_checked }} / {{ run.documents_total }} · Новых событий: {{ run.changes_created }} · Ошибок документов: {{ run.documents_failed }} · Предупреждений: {{ run.warnings_count }}</p>
+      <p class="text-muted mb-0">Последний этап: {{ stats.last_monitoring_stage }} · {{ run.updated_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC</p>
+      {% else %}<p class="text-muted mb-0">{{ 'После включения журнала проверок ещё не было.' if stats.postgres_ok else 'Данные недоступны.' }}</p>{% endif %}
+      {% if stats.monitoring_failed_recent %}<p class="alert alert-warning mt-3 mb-0">Запусков с ошибками или обрывом за последние 24 часа: {{ stats.monitoring_failed_recent }}. Подробности доступны в журнале мониторинга.</p>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="col-12">
   <div class="row row-cards mb-3">
     <div class="col-sm-6 col-lg-3">
       <div class="card">

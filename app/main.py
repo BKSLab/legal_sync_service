@@ -13,7 +13,8 @@ from app.api.v1.endpoints.tracked_documents import router as tracked_documents_r
 from app.background_tasks.scheduler import create_scheduler
 from app.core.config_logger import configure_logging
 from app.core.settings import get_settings
-from app.db.session import engine
+from app.db.session import async_session_factory, engine
+from app.repositories.monitoring import MonitoringJournal
 from app.services.configuration import load_configuration
 from app.utils.check_db import check_db_connection
 
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("🚀 Старт Legal Sync Service.")
     await check_db_connection()
     logger.info("✅ PostgreSQL доступен.")
+    await MonitoringJournal(async_session_factory).recover_abandoned()
     configuration = await load_configuration()
     logger.info("Конфигурация загружена: версия=%s, отправка в RAG=%s.", configuration.version, configuration.rag_delivery_enabled)
     global scheduler

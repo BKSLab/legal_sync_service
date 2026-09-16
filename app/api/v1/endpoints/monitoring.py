@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from app.dependencies.auth import VerifyApiKeyDep
 from app.dependencies.services import MonitoringServiceDep, ProcessingServiceDep
 from app.exceptions.configuration import ConfigurationUnavailableError
+from app.exceptions.monitoring import MonitoringJournalError
 from app.exceptions.pravo_ebpi import PravoEbpiClientError
 from app.exceptions.tracked_documents import TrackedDocumentServiceError
 from app.schemas.monitoring import MonitoringResult, ProcessingResult
@@ -23,7 +24,9 @@ router = APIRouter(prefix="/monitoring", tags=["monitoring"])
         "редакциям. Сравнивает текст статей с предыдущей редакцией, чтобы исключить "
         "сохранившиеся отметки старых поправок. Идемпотентен: повторный запуск "
         "не создаёт дубликаты событий. "
-        "Ту же операцию по расписанию выполняет планировщик; по умолчанию — каждый час."
+        "Ту же операцию по расписанию выполняет планировщик; по умолчанию — каждый час. "
+        "Каждый запуск сохраняется в журнале админки /admin/monitoring-log/{run_id}. "
+        "При параллельной проверке возвращается already_running=true без повторного обхода."
     ),
     operation_id="runMonitoring",
     response_description="Сводка по каждому проверенному документу.",
@@ -33,6 +36,8 @@ router = APIRouter(prefix="/monitoring", tags=["monitoring"])
             "content": {
                 "application/json": {
                     "example": {
+                        "run_id": 1,
+                        "already_running": False,
                         "documents_checked": 1,
                         "changes_created": 3,
                         "documents_failed": 0,
@@ -51,6 +56,7 @@ router = APIRouter(prefix="/monitoring", tags=["monitoring"])
             },
         },
         502: {"description": "Банк консолидированных редакций недоступен."},
+        503: {"description": "Не удалось сохранить журнал мониторинга."},
     },
 )
 async def run_monitoring(
@@ -70,7 +76,7 @@ async def run_monitoring(
     logger.info("🚀 Запрос POST /monitoring/run.")
     try:
         result = await service.run_monitoring()
-    except (PravoEbpiClientError, TrackedDocumentServiceError) as error:
+    except (PravoEbpiClientError, TrackedDocumentServiceError, MonitoringJournalError) as error:
         logger.exception("❌ Ошибка мониторинга: %s", error)
         raise HTTPException(status_code=error.status_code, detail=error.detail) from error
     logger.info("✅ Запрос POST /monitoring/run выполнен. событий=%s", result.changes_created)

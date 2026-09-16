@@ -2,11 +2,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.db.session import async_session_factory
 from app.dependencies.clients import PravoEbpiClientDep, RagClientDep
 from app.dependencies.repositories import (
     LegalChangesRepositoryDep,
     TrackedDocumentsRepositoryDep,
 )
+from app.repositories.monitoring import MonitoringJournal
 from app.services.configuration import load_configuration
 from app.services.legal_changes import LegalChangesService
 from app.services.monitoring import MonitoringService
@@ -59,6 +61,7 @@ def get_monitoring_service(
         tracked_documents_repository=tracked_documents_repository,
         legal_changes_repository=legal_changes_repository,
         pravo_ebpi_client=pravo_ebpi_client,
+        journal=MonitoringJournal(async_session_factory),
     )
 
 

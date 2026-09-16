@@ -1,0 +1,60 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12 monitoring-page">
+  <div class="card mb-3">
+    <div class="card-header admin-toolbar"><h3 class="card-title">Запуск №{{ run.id }} · {{ run.status | monitoring_status }}</h3><div class="admin-actions"><a class="btn btn-outline-secondary" href="{{ url_for('admin:monitoring_log') }}">К журналу</a><a class="btn btn-outline-secondary" href="{{ request.url }}">Обновить результат</a><a class="btn btn-primary" href="{{ url_for('admin:monitoring_export', run_id=run.id) }}">Скачать полный журнал JSON</a></div></div>
+    <div class="card-body">
+      <div class="monitoring-summary">
+        <div><div class="text-muted">Начало (UTC)</div>{{ run.started_at.strftime('%d.%m.%Y %H:%M:%S') }}</div>
+        <div><div class="text-muted">Завершение (UTC)</div>{{ run.finished_at.strftime('%d.%m.%Y %H:%M:%S') if run.finished_at else '—' }}</div>
+        <div><div class="text-muted">Последняя активность (UTC)</div>{{ run.updated_at.strftime('%d.%m.%Y %H:%M:%S') }}</div>
+        <div><div class="text-muted">Длительность</div>{{ ('%.2f с'|format(run.duration_seconds)) if run.duration_seconds is not none else '—' }}</div>
+        <div><div class="text-muted">Источник</div>{{ sources.get(run.source, run.source) }}</div>
+        <div><div class="text-muted">Процесс</div>{{ run.worker }}</div>
+        <div><div class="text-muted">Документов проверено / на контроле</div>{{ run.documents_checked }} / {{ run.documents_total }}</div>
+        <div><div class="text-muted">Создано событий / ошибок документов / предупреждений</div>{{ run.changes_created }} / {{ run.documents_failed }} / {{ run.warnings_count }}</div>
+      </div>
+      {% if run.status == 'running' %}<p class="alert alert-info mt-3 mb-0">Проверка выполняется. Для просмотра новых записей нажмите «Обновить результат».</p>{% endif %}
+      {% if run.status == 'interrupted' and not run.finished_at %}<p class="alert alert-warning mt-3">Точное время аварийного завершения неизвестно. Последняя активность и последний записанный этап сохранены.</p>{% endif %}
+      {% if run.error %}<p class="alert {{ 'alert-info' if run.status == 'skipped' else 'alert-danger' }} mt-3 monitoring-message">{{ run.error }}</p>{% endif %}
+      {% if run.error_traceback %}<details class="mt-3"><summary>Подробности ошибки запуска</summary><pre class="record-text">{{ run.error_traceback }}</pre></details>{% endif %}
+      <details class="mt-3"><summary>Конфигурация на момент запуска</summary><pre class="record-text">{{ run.configuration | tojson(indent=2) }}</pre></details>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-header"><h3 class="card-title">Проверки документов</h3></div>
+    <div class="card-body">
+      {% for check in checks %}
+      <article class="monitoring-check" id="check-{{ check.id }}">
+        <div class="admin-toolbar"><strong>{{ check.document_title }}</strong>{{ check.status | monitoring_status }}</div>
+        <p class="text-muted">ID в RAG: {{ check.document_id }} · Начало: {{ check.started_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · Завершение: {{ check.finished_at.strftime('%d.%m.%Y %H:%M:%S') if check.finished_at else '—' }}{% if check.finished_at %} UTC{% endif %}</p>
+        <p>Редакций в банке: {{ check.redactions_total }} · К проверке: {{ check.redactions_pending }} · Отложено до готовности текста: {{ check.redactions_skipped_incomplete }} · Новых событий: {{ check.changes_created }} · Предупреждений: {{ check.warnings_count }}</p>
+        <div class="admin-actions"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin:monitoring_run', run_id=run.id).include_query_params(check=check.id) }}#steps">Этапы этого документа</a>{% if check.tracked_document_id %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin:details', identity='tracked-document', pk=check.tracked_document_id) }}">Карточка документа</a>{% endif %}</div>
+        {% if check.error %}<p class="alert alert-danger mt-3 monitoring-message">{{ check.error }}</p>{% endif %}
+        {% if check.error_traceback %}<details class="mt-2"><summary>Подробности ошибки документа</summary><pre class="record-text">{{ check.error_traceback }}</pre></details>{% endif %}
+        <details class="mt-2"><summary>Реквизиты и условия проверки</summary><pre class="record-text">{{ check.parameters | tojson(indent=2) }}</pre></details>
+      </article>
+      {% else %}<p class="text-muted mb-0">{{ 'Документы ещё не выбраны.' if run.status == 'running' else 'Проверки документов в этом запуске не выполнялись.' }}</p>{% endfor %}
+    </div>
+  </div>
+  <div class="card" id="steps">
+    <div class="card-header"><h3 class="card-title">Ход проверки</h3></div>
+    <div class="card-body">
+      <form method="get" action="{{ url_for('admin:monitoring_run', run_id=run.id) }}#steps" class="monitoring-filters">
+        <div><label class="form-label" for="check">Документ</label><select id="check" name="check" class="form-select"><option value="">Все документы</option>{% for check in checks %}<option value="{{ check.id }}" {% if selected_check == check.id %}selected{% endif %}>{{ check.document_title }}</option>{% endfor %}</select></div>
+        <div><label class="form-label" for="level">Уровень</label><select id="level" name="level" class="form-select"><option value="">Все записи</option>{% for key, label in levels.items() %}<option value="{{ key }}" {% if selected_level == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        <div class="admin-actions"><button class="btn btn-primary" type="submit">Применить фильтры</button><a class="btn btn-outline-secondary" href="{{ url_for('admin:monitoring_run', run_id=run.id) }}#steps">Сбросить</a></div>
+      </form>
+      {% for entry in entries %}
+      <article class="monitoring-entry mt-3">
+        <div class="text-muted">{{ entry.created_at.strftime('%d.%m.%Y %H:%M:%S.%f')[:-3] }} UTC · {{ levels[entry.level] }}{% if entry.check_id %} · <a href="#check-{{ entry.check_id }}">{{ check_titles.get(entry.check_id, entry.check_id) }}</a>{% endif %}</div>
+        <p class="mb-1 {{ 'text-danger' if entry.level == 'error' else '' }}">{{ entry.message }}</p>
+        <div class="text-muted">{{ entry.stage }}</div>
+        {% if entry.details %}<details><summary>Данные этапа</summary><pre class="record-text">{{ entry.details | tojson(indent=2) }}</pre></details>{% endif %}
+      </article>
+      {% else %}<p class="text-muted mt-3">Записей по выбранным условиям нет.</p>{% endfor %}
+    </div>
+    <div class="card-footer admin-toolbar"><span>Записей: {{ total }} · Страница {{ page }}</span><div class="admin-actions">{% if page > 1 %}<a class="btn btn-outline-secondary" href="{{ request.url.include_query_params(page=page-1) }}#steps">Предыдущая</a>{% endif %}{% if page * page_size < total %}<a class="btn btn-outline-secondary" href="{{ request.url.include_query_params(page=page+1) }}#steps">Следующая</a>{% endif %}</div></div>
+  </div>
+</div>
+{% endblock %}

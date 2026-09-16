@@ -135,6 +135,14 @@ span.flatpickr-weekday,
 .admin-login form { width: 100%; max-width: 420px; }
 
 .row-deck > .configuration-page { display: block; }
+.row-deck > .monitoring-page { display: block; }
+.monitoring-filters, .monitoring-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.monitoring-filters { align-items: end; }
+.monitoring-page .form-label { text-transform: none; letter-spacing: normal; }
+.monitoring-summary, .monitoring-message, .monitoring-check, .monitoring-entry { overflow-wrap: anywhere; }
+.monitoring-check + .monitoring-check, .monitoring-entry { border-top: 1px solid var(--border); padding-top: 16px; }
+.monitoring-check + .monitoring-check { margin-top: 20px; }
+.monitoring-page summary { cursor: pointer; color: var(--accent); }
 .configuration-summary, .configuration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .configuration-toggle { display: flex; align-items: center; gap: 12px; font-weight: 600; cursor: pointer; }
 .configuration-toggle .form-check-input { margin: 0; flex: 0 0 auto; }
@@ -143,6 +151,7 @@ span.flatpickr-weekday,
 .configuration-history + .configuration-history { border-top: 1px solid var(--border); padding-top: 16px; }
 
 @media (max-width: 767px) {
+    .monitoring-filters, .monitoring-summary { grid-template-columns: minmax(0, 1fr); }
     .configuration-summary, .configuration-grid { grid-template-columns: minmax(0, 1fr); }
     .admin-brand { max-width: 180px; padding: 0; font-size: 14px; }
     .admin-logout { margin-top: 0; }

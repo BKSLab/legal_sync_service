@@ -1,11 +1,10 @@
 import logging
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.pravo_ebpi import PravoEbpiClient
@@ -13,6 +12,7 @@ from app.clients.rag import RagClient
 from app.core.settings import get_settings
 from app.db.session import async_session_factory
 from app.repositories.legal_changes import LegalChangesRepository
+from app.repositories.monitoring import MonitoringJournal
 from app.repositories.tracked_documents import TrackedDocumentsRepository
 from app.schemas.configuration import ConfigurationValues
 from app.services.configuration import load_configuration
@@ -21,10 +21,6 @@ from app.services.processing import ProcessingService
 
 logger = logging.getLogger(__name__)
 
-# Ключи advisory-lock PostgreSQL. Задачи из `lifespan` стартуют в каждом
-# воркере ASGI-сервера, поэтому без блокировки один и тот же мониторинг
-# запустился бы столько раз, сколько воркеров поднято.
-MONITORING_LOCK_KEY = 8_401_001
 CONFIGURATION_REFRESH_SECONDS = 15
 
 
@@ -37,26 +33,6 @@ async def _job_context() -> AsyncGenerator[tuple[AsyncSession, httpx.AsyncClient
             yield db_session, httpx_client
 
 
-async def _run_with_lock(lock_key: int, job_name: str, job: Callable) -> None:
-    """Выполняет задачу под advisory-lock, если её не выполняет другой воркер."""
-
-    async with async_session_factory() as lock_session:
-        acquired = await lock_session.execute(
-            text("SELECT pg_try_advisory_lock(:key)"),
-            {"key": lock_key},
-        )
-        if not acquired.scalar():
-            logger.info("⚠️ Задача %s уже выполняется другим воркером, пропуск.", job_name)
-            return
-        try:
-            await job()
-        finally:
-            await lock_session.execute(
-                text("SELECT pg_advisory_unlock(:key)"),
-                {"key": lock_key},
-            )
-
-
 async def run_monitoring_job() -> None:
     """Плановая задача: ищет новые редакции документов на контроле."""
 
@@ -65,25 +41,14 @@ async def run_monitoring_job() -> None:
         return
     settings = get_settings()
 
-    async def job() -> None:
-        if not (await load_configuration()).monitoring_enabled:
-            return
-        async with _job_context() as (db_session, httpx_client):
-            service = MonitoringService(
-                tracked_documents_repository=TrackedDocumentsRepository(db_session=db_session),
-                legal_changes_repository=LegalChangesRepository(db_session=db_session),
-                pravo_ebpi_client=PravoEbpiClient(
-                    httpx_client=httpx_client,
-                    settings=settings.pravo_ebpi,
-                ),
-            )
-            await service.run_monitoring()
-
-    await _run_with_lock(
-        lock_key=MONITORING_LOCK_KEY,
-        job_name="мониторинга",
-        job=job,
-    )
+    async with _job_context() as (db_session, httpx_client):
+        service = MonitoringService(
+            tracked_documents_repository=TrackedDocumentsRepository(db_session=db_session),
+            legal_changes_repository=LegalChangesRepository(db_session=db_session),
+            pravo_ebpi_client=PravoEbpiClient(httpx_client=httpx_client, settings=settings.pravo_ebpi),
+            journal=MonitoringJournal(async_session_factory),
+        )
+        await service.run_monitoring(source="scheduled")
 
 
 async def run_processing_job() -> None:

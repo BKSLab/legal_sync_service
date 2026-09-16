@@ -31,6 +31,8 @@ class MonitoringDocumentResult(BaseModel):
 class MonitoringResult(BaseModel):
     """Сводка одного запуска мониторинга."""
 
+    run_id: int | None = Field(None, description="ID записи в журнале мониторинга.")
+    already_running: bool = Field(False, description="Запуск пропущен: проверка уже выполняется или этот срок расписания уже обработан.")
     documents_checked: int = Field(..., description="Сколько документов проверено.", examples=[1])
     changes_created: int = Field(..., description="Сколько событий изменений создано.", examples=[5])
     documents_failed: int = Field(
