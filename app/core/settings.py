@@ -114,6 +114,7 @@ class RagSettings(SettingsBase):
     # Начальное значение для БД. После инициализации меняется через админку.
     rag_delivery_enabled: bool = False
     rag_service_base_url: str = "http://localhost:8002"
+    rag_admin_base_url: str | None = None
     rag_service_api_key: SecretStr | None = None
     rag_service_timeout_seconds: int = 60
 

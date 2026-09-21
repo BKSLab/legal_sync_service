@@ -14,6 +14,7 @@ class TrackedDocument(TimestampMixin, Base):
     """Модель отслеживаемого нормативного акта."""
 
     __tablename__ = "tracked_documents"
+    rag_ingestion_id: Mapped[str | None] = mapped_column(String(36))
 
     id: Mapped[int] = mapped_column(
         primary_key=True,

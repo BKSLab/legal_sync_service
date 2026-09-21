@@ -357,6 +357,7 @@ class MonitoringService:
         changes = []
         for section in changed_sections:
             change = LegalChangeCreateRequest(
+                monitoring_check_id=self.recorder.check_id if self.recorder else None,
                 tracked_document_id=document.id,
                 section_number=section.number,
                 section_title=section.title,

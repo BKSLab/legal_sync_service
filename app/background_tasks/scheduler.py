@@ -11,6 +11,7 @@ from app.clients.pravo_ebpi import PravoEbpiClient
 from app.clients.rag import RagClient
 from app.core.settings import get_settings
 from app.db.session import async_session_factory
+from app.repositories.delivery_journal import DeliveryJournal
 from app.repositories.legal_changes import LegalChangesRepository
 from app.repositories.monitoring import MonitoringJournal
 from app.repositories.tracked_documents import TrackedDocumentsRepository
@@ -68,6 +69,7 @@ async def run_processing_job() -> None:
             ),
             rag_client=RagClient(httpx_client=httpx_client, settings=settings.rag),
             configuration_provider=load_configuration,
+            journal=DeliveryJournal(async_session_factory),
         )
         await service.run_processing()
 

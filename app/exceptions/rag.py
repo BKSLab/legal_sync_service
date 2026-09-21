@@ -1,6 +1,10 @@
 from fastapi import status
 
 
+class DeliveryPaused(Exception):
+    """Отправку отключили после начала извлечения статьи."""
+
+
 class RagClientError(Exception):
     """RAG Service недоступен или ответил ошибкой на своей стороне.
 

@@ -7,6 +7,7 @@ from app.db.models.legal_changes import LegalChangeStatus
 
 class LegalChangeCreateRequest(BaseModel):
     """Тело запроса создания события изменения."""
+    monitoring_check_id: int | None = Field(None, gt=0)
 
     model_config = ConfigDict(
         json_schema_extra={

@@ -10,6 +10,7 @@ RAG_TOPICS_CATEGORIES = ("other_npa",)
 
 class TrackedDocumentBase(BaseModel):
     """Базовые поля отслеживаемого документа."""
+    rag_ingestion_id: str | None = Field(None, pattern=r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
 
     document_id: str = Field(
         ..., min_length=1, max_length=200,

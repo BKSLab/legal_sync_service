@@ -1,0 +1,5 @@
+{% extends "sqladmin/details.html" %}
+{% block content %}
+<div class="col-12 mb-3"><a class="btn btn-outline-primary" href="/admin/document-trace?document_id={{ model.document_id | urlencode }}">Весь путь документа до обновления коллекции</a></div>
+{{ super() }}
+{% endblock %}

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -7,8 +8,9 @@ from app.clients.rag import RagClient
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
 from app.exceptions.configuration import ConfigurationUnavailableError
 from app.exceptions.legal_changes import LegalChangeRepositoryError
-from app.exceptions.rag import RagStaleRevisionError
+from app.exceptions.rag import DeliveryPaused, RagStaleRevisionError
 from app.exceptions.redaction import RedactionNotReadyError, RedactionParseError
+from app.repositories.delivery_journal import DeliveryJournal, current_delivery
 from app.repositories.legal_changes import LegalChangesRepository
 from app.schemas.configuration import ConfigurationValues
 from app.schemas.monitoring import ProcessingResult
@@ -16,10 +18,6 @@ from app.services.redaction_parser import RedactionDocument
 from app.services.section_text import SectionTextService
 
 logger = logging.getLogger(__name__)
-
-
-class DeliveryPaused(Exception):
-    """Отправку отключили после начала извлечения статьи."""
 
 
 class ProcessingService:
@@ -39,6 +37,7 @@ class ProcessingService:
         max_retries: int = 3,
         delivery_enabled: bool = False,
         configuration_provider: Callable[[], Awaitable[ConfigurationValues]] | None = None,
+        journal: DeliveryJournal | None = None,
     ):
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
@@ -47,6 +46,7 @@ class ProcessingService:
         self.max_retries = max_retries
         self.delivery_enabled = delivery_enabled
         self.configuration_provider = configuration_provider
+        self.journal = journal
 
     async def _delivery_enabled(self) -> bool:
         if self.configuration_provider is not None:
@@ -90,6 +90,8 @@ class ProcessingService:
             if not await self._delivery_enabled():
                 return self._disabled_result()
             recovered = await self.legal_changes_repository.recover_interrupted_processing()
+            if self.journal:
+                await self.journal.recover_interrupted()
             result = await self._run_processing()
             result.changes_recovered = recovered
             return result
@@ -179,6 +181,14 @@ class ProcessingService:
     # Блок приватных методов обработки события
 
     async def _process_change(
+        self, change: LegalChange, parsed_redactions: dict[int, RedactionDocument],
+    ) -> None:
+        if self.journal is None:
+            return await self._apply_change(change, parsed_redactions)
+        async with self.journal.start(change):
+            return await self._apply_change(change, parsed_redactions)
+
+    async def _apply_change(
         self,
         change: LegalChange,
         parsed_redactions: dict[int, RedactionDocument],
@@ -204,6 +214,12 @@ class ProcessingService:
             document_hash=document.ebpi_doc_hash,
             parsed_redactions=parsed_redactions,
         )
+        recorder = current_delivery.get()
+        if recorder:
+            await recorder.event(
+                'text_ready', input_sha256=hashlib.sha256(redaction_text.encode()).hexdigest(),
+                input_characters=len(redaction_text), text_source=self.section_text.source_reference(change=change),
+            )
         revision_date = change.redaction_date or change.effective_date
         if revision_date is None:
             raise RedactionParseError(f"У события {change.id} не определена дата редакции.")
@@ -239,6 +255,8 @@ class ProcessingService:
             },
         )
         logger.info("✅ Событие отправлено в RAG. change_id=%s", change.id)
+        if recorder:
+            await recorder.event('saved')
 
     async def _mark_failed(self, change: LegalChange, error: Exception) -> None:
         """Переводит событие в статус ошибки и сохраняет причину."""

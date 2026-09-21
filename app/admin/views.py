@@ -105,6 +105,8 @@ class DashboardView(BaseView):
 class TrackedDocumentAdmin(ModelView, model=TrackedDocument):
     """Раздел админки для реестра документов."""
 
+    details_template = 'tracked_document_details.html'
+
     name = "Документ"
     name_plural = "Реестр документов"
     icon = "fa-solid fa-scale-balanced"

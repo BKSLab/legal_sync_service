@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.db.session import async_session_factory
 from app.dependencies.clients import PravoEbpiClientDep, RagClientDep
@@ -8,6 +9,7 @@ from app.dependencies.repositories import (
     LegalChangesRepositoryDep,
     TrackedDocumentsRepositoryDep,
 )
+from app.repositories.delivery_journal import DeliveryJournal
 from app.repositories.monitoring import MonitoringJournal
 from app.services.configuration import load_configuration
 from app.services.legal_changes import LegalChangesService
@@ -80,6 +82,7 @@ def get_processing_service(
         pravo_ebpi_client=pravo_ebpi_client,
         rag_client=rag_client,
         configuration_provider=load_configuration,
+        journal=DeliveryJournal(async_sessionmaker(legal_changes_repository.db_session.bind, expire_on_commit=False)),
     )
 
 

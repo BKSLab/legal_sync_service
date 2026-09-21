@@ -1,4 +1,6 @@
 from sqladmin.authentication import AuthenticationBackend
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from app.core.settings import get_settings
@@ -6,6 +8,11 @@ from app.core.settings import get_settings
 
 class AdminAuth(AuthenticationBackend):
     """Аутентификация sqladmin по логину и паролю из настроек."""
+
+    def __init__(self, secret_key: str, https_only: bool = False):
+        super().__init__(secret_key=secret_key)
+        self.middlewares = [Middleware(SessionMiddleware, secret_key=secret_key, https_only=https_only,
+                                       session_cookie='legal_sync_admin')]
 
     async def login(self, request: Request) -> bool:
         """Проверяет логин и пароль администратора."""

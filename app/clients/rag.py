@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from datetime import date
 from typing import Any
@@ -6,6 +7,7 @@ import httpx
 
 from app.core.settings import RagSettings
 from app.exceptions.rag import RagClientError, RagRejectedError, RagStaleRevisionError
+from app.repositories.delivery_journal import current_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,25 @@ class RagClient:
     def __init__(self, httpx_client: httpx.AsyncClient, settings: RagSettings):
         self.httpx_client = httpx_client
         self.settings = settings
+
+    async def get_ingestion_runs(self, document_id: str, page: int = 1) -> dict:
+        if self.settings.rag_service_api_key is None:
+            raise RagClientError('Ключ доступа к RAG не настроен. История RAG недоступна.')
+        try:
+            response = await self.httpx_client.get(
+                f'{self.settings.rag_service_base_url}/api/v1/ingestion-runs',
+                params={'document_id': document_id, 'page': page, 'page_size': 20},
+                headers={'X-API-Key': self.settings.rag_service_api_key.get_secret_value()},
+                timeout=min(self.settings.rag_service_timeout_seconds, 5),
+            )
+            if response.status_code != 200:
+                raise RagClientError(f'История RAG недоступна: HTTP {response.status_code}.')
+            data = response.json()
+            if not isinstance(data, dict) or not isinstance(data.get('items'), list):
+                raise ValueError
+            return data
+        except (httpx.HTTPError, ValueError) as error:
+            raise RagClientError('Не удалось прочитать историю RAG.') from error
 
     async def update_section(
         self,
@@ -83,6 +104,11 @@ class RagClient:
             "amending_act_date": amending_act_date.isoformat() if amending_act_date else None,
         }
         headers = {"X-API-Key": self.settings.rag_service_api_key.get_secret_value()}
+        recorder = current_delivery.get()
+        if recorder:
+            headers['X-Request-ID'] = recorder.values['id']
+            headers['X-Legal-Sync-Change-ID'] = str(recorder.values['change_id'])
+            await recorder.event('waiting_rag')
 
         logger.info(
             "🔄 Отправка статьи в RAG. document_id=%s section=%s редакция=%s",
@@ -99,6 +125,9 @@ class RagClient:
             )
         except (httpx.TimeoutException, httpx.TransportError) as error:
             raise RagClientError(f"RAG Service недоступен: {type(error).__name__}: {error}") from error
+
+        if recorder:
+            await recorder.event('response_received', http_status=response.status_code)
 
         if response.status_code == 409:
             try:
@@ -131,6 +160,23 @@ class RagClient:
             result = response.json()
         except ValueError as error:
             raise RagClientError("RAG Service вернул не JSON.") from error
+        if not isinstance(result, dict):
+            raise RagClientError('RAG Service вернул некорректный результат.')
+        if recorder:
+            await recorder.event('response_received', response={
+                key: result[key] for key in (
+                    'operation_id', 'status', 'warnings', 'document_id', 'section_number',
+                    'version', 'chunks_count', 'superseded_chunks',
+                    'collection_name', 'input_sha256', 'integrity_verified',
+                ) if key in result
+            })
+        if result.get('operation_id'):
+            expected = {
+                'document_id': document_id, 'section_number': section_number, 'version': revision_date.isoformat(),
+                'input_sha256': hashlib.sha256(raw_text.encode()).hexdigest(), 'integrity_verified': True,
+            }
+            if any(result.get(key) != value for key, value in expected.items()):
+                raise RagClientError('Подтверждение RAG не соответствует отправленной статье. Проверьте журнал попытки.')
         logger.info(
             "✅ Статья принята RAG. document_id=%s section=%s",
             document_id,

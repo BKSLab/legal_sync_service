@@ -1,5 +1,6 @@
 {% extends "sqladmin/details.html" %}
 {% block content %}
+<div class="col-12 mb-3"><a class="btn" href="/admin/document-trace?document_id={{ model.tracked_document.document_id | urlencode }}">Весь путь документа и попытки доставки</a></div>
 {% if model.status.value in ['draft', 'approved', 'scheduled', 'failed'] %}
 <div class="col-12 mb-3">
   <a class="btn btn-primary" href="{{ url_for('admin:preview_change', change_id=model.id) }}">

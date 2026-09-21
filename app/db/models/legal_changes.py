@@ -24,6 +24,7 @@ class LegalChange(TimestampMixin, Base):
     """Модель события изменения нормативного акта."""
 
     __tablename__ = "legal_changes"
+    monitoring_check_id: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (
         # Единица дедупликации — редакция, а не акт-поправка: один закон может
         # менять одну и ту же статью в нескольких редакциях с разными датами
