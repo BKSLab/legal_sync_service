@@ -25,9 +25,11 @@ class LegalChangesService:
         self,
         legal_changes_repository: LegalChangesRepository,
         tracked_documents_repository: TrackedDocumentsRepository,
+        automation_repository=None,
     ):
         self.legal_changes_repository = legal_changes_repository
         self.tracked_documents_repository = tracked_documents_repository
+        self.automation_repository = automation_repository
 
     async def create_change(self, data: LegalChangeCreateRequest) -> LegalChangeSchema:
         """Создает событие изменения в статусе draft."""
@@ -91,6 +93,11 @@ class LegalChangesService:
         send_at = datetime.combine(effective_date, time.min, tzinfo=UTC) if effective_date else None
         values = {
             "status": LegalChangeStatus.SCHEDULED,
+            "review_origin": "human",
+            "verified_text_sha256": None,
+            "verified_payload_sha256": None,
+            "last_error": None,
+            "retry_count": 0,
             "effective_date": effective_date,
             "send_at": send_at,
             "reviewed_by": data.reviewed_by,
@@ -98,6 +105,8 @@ class LegalChangesService:
             "review_notes": data.review_notes,
         }
         updated = await self.legal_changes_repository.save_review(change=change, values=values)
+        if self.automation_repository:
+            await self.automation_repository.refresh_outcome(updated)
         return LegalChangeSchema.model_validate(updated)
 
     async def reject_change(self, change_id: int, data: LegalChangeReviewRequest) -> LegalChangeSchema:
@@ -107,10 +116,13 @@ class LegalChangesService:
             raise LegalChangeInvalidStatusError(change.id, change.status.value, LegalChangeStatus.DRAFT.value)
         updated = await self.legal_changes_repository.save_review(change=change, values={
             "status": LegalChangeStatus.CANCELLED,
+            "review_origin": "human",
             "reviewed_by": data.reviewed_by,
             "reviewed_at": datetime.now(UTC),
             "review_notes": data.review_notes,
         })
+        if self.automation_repository:
+            await self.automation_repository.refresh_outcome(updated)
         return LegalChangeSchema.model_validate(updated)
 
     async def cancel_change(self, change_id: int, review_notes: str | None = None) -> LegalChangeSchema:

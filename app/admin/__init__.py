@@ -11,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.admin.auth import AdminAuth
+from app.admin.automation import AutomationView
 from app.admin.change_review import ChangeReviewView, render_change_details
 from app.admin.configuration import ConfigurationView
 from app.admin.document_trace import DocumentTraceView
@@ -74,6 +75,7 @@ def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
     admin.templates.env.filters["monitoring_status"] = monitoring_status
     admin.templates.env.policies["json.dumps_kwargs"] = {"sort_keys": True, "ensure_ascii": False}
     admin.add_view(DashboardView)
+    admin.add_view(AutomationView)
     admin.add_view(DocumentTraceView)
     admin.add_view(TrackedDocumentAdmin)
     admin.add_view(LegalChangeAdmin)

@@ -129,6 +129,16 @@ class SchedulerSettings(SettingsBase):
     processing_max_retries: int = 3
 
 
+class VerificationSettings(SettingsBase):
+    """Подключение проверяющей LLM; режим и модель управляются в админке."""
+
+    verification_api_url: str = "https://polza.ai/api/v1/chat/completions"
+    verification_api_key: SecretStr | None = None
+    verification_timeout_seconds: int = 180
+    verification_max_input_characters: int = 300_000
+    verification_max_output_tokens: int = 12000
+
+
 class Settings(BaseSettings):
     """Агрегированные настройки проекта."""
 
@@ -140,6 +150,7 @@ class Settings(BaseSettings):
     pravo_ebpi: PravoEbpiSettings = Field(default_factory=PravoEbpiSettings)
     rag: RagSettings = Field(default_factory=RagSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    verification: VerificationSettings = Field(default_factory=VerificationSettings)
 
 
 @lru_cache

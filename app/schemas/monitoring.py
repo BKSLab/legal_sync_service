@@ -45,6 +45,7 @@ class MonitoringResult(BaseModel):
 
 class ProcessingResult(BaseModel):
     """Сводка одного запуска обработки очереди отправки."""
+    changes_needing_review: int = Field(0, description="Отправка остановлена до разбора исключения оператором.")
 
     delivery_disabled: bool = Field(
         False, description="Отправка в RAG отключена в конфигурации сервиса.",

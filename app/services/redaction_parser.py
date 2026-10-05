@@ -44,6 +44,7 @@ class RedactionDocument:
             if paragraph_id
         }
         self._invalid_sections: set[str] = set()
+        self.unparsed_article_captions: list[str] = []
         self.sections = self._collect_sections(content_nodes=content_nodes)
         self._section_starts = [section.first_paragraph_position for section in self.sections]
         logger.info(
@@ -236,6 +237,7 @@ class RedactionDocument:
                 continue
             parsed = self._parse_article_caption(caption=node.caption)
             if parsed is None:
+                self.unparsed_article_captions.append(node.caption)
                 logger.warning("⚠️ Заголовок статьи не разобран. caption=%s", node.caption)
                 continue
             number, title = parsed

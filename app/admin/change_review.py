@@ -6,13 +6,16 @@ import httpx
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import ValidationError
 from sqladmin import BaseView, expose
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.clients.pravo_ebpi import PravoEbpiClient
 from app.core.settings import get_settings
+from app.db.models import AutomationCase, AutomationRun, LegalChange
 from app.db.models.legal_changes import LegalChangeStatus
 from app.exceptions.legal_changes import (
     LegalChangeInvalidStatusError,
@@ -26,6 +29,7 @@ from app.exceptions.redaction import (
     RedactionParseError,
     RedactionSectionNotFoundError,
 )
+from app.repositories.automation import AutomationRepository
 from app.repositories.configuration import ConfigurationRepository
 from app.repositories.legal_changes import LegalChangesRepository
 from app.repositories.tracked_documents import TrackedDocumentsRepository
@@ -64,6 +68,14 @@ async def render_change_details(admin, request, model, *, error=None, values=Non
             logger.warning("Сравнение события №%s недоступно: %s", model.id, exc)
             comparison_error = str(exc)
     model_view = admin._find_model_view("legal-change")
+    async with admin.session_maker() as session:
+        automation_case = await session.scalar(select(AutomationCase).where(
+            AutomationCase.tracked_document_id == model.tracked_document_id, AutomationCase.redaction_id == model.ebpi_redaction_id,
+        ))
+        automation_run = await session.get(AutomationRun, automation_case.latest_run_id) if automation_case and automation_case.latest_run_id else None
+        related_changes = list(await session.scalars(select(LegalChange).where(
+            LegalChange.amending_doc_hash == model.amending_doc_hash,
+        ).order_by(LegalChange.id))) if model.amending_doc_hash else []
     response = await admin.templates.TemplateResponse(request, "legal_change_details.html", {
         "model": model, "model_view": model_view, "title": f"Проверка изменения · событие №{model.id}",
         "csrf_token": token, "review_error": error, "review_values": values or {},
@@ -72,6 +84,7 @@ async def render_change_details(admin, request, model, *, error=None, values=Non
         "comparison": comparison, "comparison_error": comparison_error,
         "amendment_url": official_document_url(model.amending_doc_hash, model.amending_law_ref),
         "document_url": official_document_url(model.tracked_document.ebpi_doc_hash),
+        "automation_case": automation_case, "automation_run": automation_run, "related_changes": related_changes,
     }, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -110,7 +123,8 @@ class ChangeReviewView(BaseView):
                         review_notes=str(form.get("review_notes", "")).strip() or None,
                         effective_date=form.get("effective_date") if decision == "approve" else None,
                     )
-                    service = LegalChangesService(repository, TrackedDocumentsRepository(session))
+                    service = LegalChangesService(repository, TrackedDocumentsRepository(session),
+                                                  AutomationRepository(async_sessionmaker(session.bind, expire_on_commit=False)))
                     if decision == "approve":
                         await service.approve_change(change.id, data)
                     else:

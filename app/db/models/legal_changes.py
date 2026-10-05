@@ -24,6 +24,10 @@ class LegalChange(TimestampMixin, Base):
     """Модель события изменения нормативного акта."""
 
     __tablename__ = "legal_changes"
+    review_origin: Mapped[str | None] = mapped_column(String(20))
+    automation_run_id: Mapped[int | None] = mapped_column(Integer)
+    verified_text_sha256: Mapped[str | None] = mapped_column(String(64))
+    verified_payload_sha256: Mapped[str | None] = mapped_column(String(64))
     monitoring_check_id: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (
         # Единица дедупликации — редакция, а не акт-поправка: один закон может

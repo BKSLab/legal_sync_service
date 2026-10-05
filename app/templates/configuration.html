@@ -28,6 +28,11 @@
     <input type="hidden" name="version" value="{{ values.version }}">
     <div class="card-header"><h2 class="card-title">Настройки работы сервиса</h2></div>
     <div class="card-body configuration-form">
+      <div class="configuration-grid mb-3">
+        <div><label class="form-label" for="automation_mode">Режим проверки изменений</label><select class="form-control" id="automation_mode" name="automation_mode">{% for value,label in [('manual','Ручное подтверждение'),('shadow','Проверять автоматически, подтверждать вручную'),('auto','Автоматически · человеку только исключения')] %}<option value="{{ value }}" {% if values.automation_mode == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% if errors.automation_mode %}<p class="text-danger">{{ errors.automation_mode }}</p>{% endif %}</div>
+        <div><label class="form-label" for="verification_model">Модель проверки LLM</label><input class="form-control" id="verification_model" name="verification_model" value="{{ values.verification_model }}" required maxlength="200">{% if errors.verification_model %}<p class="text-danger">{{ errors.verification_model }}</p>{% endif %}</div>
+      </div>
+      <p class="text-muted">Автоподтверждение требует полного совпадения статей, дат и проверяемых цитат. Ошибки и противоречия остаются оператору. Переключение в ручной режим останавливает новые автоподтверждения; уже запланированную отправку останавливает отдельный выключатель ниже. <a href="{{ url_for('admin:automation') }}">Наблюдать за циклом</a></p>
       <div class="mb-4">
         <label class="configuration-toggle" for="rag_delivery_enabled">
           <input class="form-check-input" id="rag_delivery_enabled" name="rag_delivery_enabled" type="checkbox" {% if values.rag_delivery_enabled %}checked{% endif %}>
@@ -81,6 +86,8 @@
       <p class="text-muted mb-0">Адреса и ключи задаются в .env на сервере. Наличие ключа не означает, что соединение проверено. Сохранение конфигурации не обращается к RAG.</p>
     </div>
   </div>
+
+  <div class="card mb-3"><div class="card-header"><h2 class="card-title">Подключение проверяющей LLM</h2></div><div class="card-body"><p>Адрес: <span class="configuration-address">{{ verification_address }}</span></p><p>Ключ: {{ 'задан' if verification_key_configured else 'не задан' }}.</p><p class="text-muted mb-0">Модель получает официальные тексты закона и редакций. Ключ хранится на сервере; заключения, цитаты, модель и версия правил сохраняются в протоколе проверки. Наличие ключа не означает успешного вызова.</p></div></div>
 
   <div class="card">
     <div class="card-header"><h2 class="card-title">Последние изменения конфигурации</h2></div>

@@ -16,6 +16,8 @@ class ServiceConfiguration(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=False)
+    automation_mode: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    verification_model: Mapped[str] = mapped_column(String(200), default="google/gemini-3.5-flash-lite", server_default="google/gemini-3.5-flash-lite")
     rag_delivery_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
     monitoring_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
     monitoring_cron_hour: Mapped[str] = mapped_column(String(100), nullable=False)

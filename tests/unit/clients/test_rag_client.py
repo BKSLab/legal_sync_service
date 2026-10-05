@@ -1,3 +1,4 @@
+import hashlib
 from datetime import date
 
 import httpx
@@ -50,7 +51,11 @@ async def test_payload_matches_rag_contract():
         captured["url"] = str(request.url)
         captured["body"] = json.loads(request.content)
         captured["api_key"] = request.headers.get("X-API-Key")
-        return httpx.Response(200, json={"document_id": "labor_code_rf", "chunks_count": 3})
+        return httpx.Response(200, json={
+            "document_id": "labor_code_rf", "chunks_count": 3, "section_number": "59", "version": "2027-03-01",
+            "operation_id": "operation-1", "status": "succeeded", "warnings": [], "integrity_verified": True,
+            "input_sha256": hashlib.sha256(captured["body"]["raw_text"].encode()).hexdigest(),
+        })
 
     client = _build_client(handler)
     await _send(client)
@@ -117,3 +122,11 @@ async def test_other_conflicts_do_not_cancel_events_as_stale(body):
         await _send(client)
 
     assert not isinstance(error.value, RagStaleRevisionError)
+
+
+@pytest.mark.parametrize("status", [408, 429, 503])
+async def test_temporary_server_errors_allow_bounded_retry(status):
+    client = _build_client(lambda request: httpx.Response(status, json={"detail": "temporary"}))
+    with pytest.raises(RagClientError) as error:
+        await _send(client)
+    assert not isinstance(error.value, RagRejectedError)

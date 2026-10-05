@@ -160,6 +160,21 @@ span.flatpickr-weekday,
 }
 
 .row-deck > .configuration-page { display: block; }
+.automation-page { min-width: 0; }
+.automation-page .btn { max-width: 100%; white-space: normal; }
+.automation-page .card-body { overflow-wrap: anywhere; }
+.automation-flow, .automation-facts { display: flex; flex-wrap: wrap; gap: 12px; }
+.automation-counters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.automation-count { display: block; font-size: 28px; }
+.automation-article { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; }
+.automation-article + .automation-article, .automation-evidence { border-top: 1px solid var(--border); }
+.automation-evidence { margin-top: 16px; padding-top: 12px; }
+.automation-page summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+.automation-page blockquote { padding: 12px; border-left: 3px solid var(--accent); background: var(--background); }
+@media (max-width: 767px) {
+    .automation-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .automation-article { flex-direction: column; }
+}
 .row-deck > .monitoring-page { display: block; }
 .monitoring-filters, .monitoring-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .monitoring-filters { align-items: end; }

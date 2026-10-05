@@ -1,0 +1,30 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12 d-block automation-page" {% if case.status in ['pending','running','error'] %}data-auto-refresh="15"{% endif %}>
+  <div class="card mb-3"><div class="card-header admin-toolbar"><h2 class="card-title">{{ document.full_title }}</h2><strong>{{ statuses[case.status] }}</strong></div><div class="card-body">
+    <p>{{ case.message or 'Ожидает обработки.' }}</p><p>Текущий этап: <strong>{{ stages.get(case.stage, case.stage) }}</strong> · редакция {{ case.redaction_id }} · попыток {{ case.attempts }}</p>
+    {% if case.status == 'needs_review' %}<div class="alert alert-warning">Автоматическое решение остановлено. Изучите причины и доказательства ниже. Для ручного решения откройте нужную статью; для повторной проверки используйте кнопку ниже.</div>{% endif %}
+    <div class="admin-actions"><a class="btn btn-outline-secondary" href="{{ url_for('admin:automation') }}">Все проверки</a>{% if law_url %}<a class="btn btn-outline-primary" href="{{ law_url }}" target="_blank" rel="noopener noreferrer">Открыть закон-поправку</a>{% endif %}<a class="btn btn-outline-secondary" href="{{ url_for('admin:document_trace').include_query_params(document_id=document.document_id) }}">Журнал доставки в RAG</a></div>
+    {% if case.status in ['needs_review','error','shadow_pass','interrupted'] %}<form class="mt-3" method="post" action="{{ url_for('admin:automation_retry', case_id=case.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="btn btn-outline-primary">Повторить проверку актуальных данных</button><p class="text-muted mt-2 mb-0">Запрос попадёт в очередь. История предыдущих решений сохранится. В ручном режиме очередь приостановлена.</p></form>{% endif %}
+  </div></div>
+  <div class="card mb-3"><div class="card-header"><h2 class="card-title">Все статьи этого изменения</h2></div><div class="card-body">
+    {% for change in changes %}<div class="automation-article"><div><a href="{{ url_for('admin:details', identity='legal-change', pk=change.id) }}"><strong>Статья {{ change.section_number }}. {{ change.section_title or '' }}</strong></a><div class="text-muted">Событие №{{ change.id }} · вступление в силу {{ change.effective_date or 'не определено' }} · решение {{ {'auto':'автоматическое','human':'оператора'}.get(change.review_origin,'ещё не принято') }}</div>{% if change.last_error %}<p class="text-danger mt-2">{{ change.last_error }}</p>{% endif %}</div><div>{{ change.status | change_status }}{% if change.sent_at %}<div class="text-muted">{{ change.sent_at.strftime('%d.%m.%Y %H:%M') }} UTC</div>{% endif %}</div></div>
+    {% else %}<p class="text-danger">Ни одного события статьи не создано. Это исключение требует проверки мониторинга.</p>{% endfor %}
+  </div></div>
+  {% for run in runs %}
+  <div class="card mb-3"><div class="card-header admin-toolbar"><h2 class="card-title">Попытка №{{ run.id }} · {{ statuses.get(run.status,run.status) }}</h2><span>{{ run.started_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC</span></div><div class="card-body">
+    <p>Модель: {{ run.model }} · правила: {{ run.policy_version }} · конфигурация: {{ run.configuration_version }} · режим: {{ run.mode }}</p>
+    {% if run.error %}<div class="alert alert-danger">{{ run.error }}</div>{% endif %}
+    {% if run.result.get('problems') %}<div class="alert alert-warning"><strong>Причины остановки</strong><ul>{% for problem in run.result.problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if run.result.get('report') %}<p><strong>Заключение:</strong> {{ run.result.report.summary }}</p>
+      {% for article in run.result.report.expected_articles %}<details class="automation-evidence"><summary>Статья {{ article.section_number }} · {{ article.effective_date or 'дата не доказана' }} · {{ 'текущий этап' if article.applies_to_revision else 'другой этап закона' }}</summary><p>{{ article.explanation }}</p><p class="text-muted">Фрагмент закона</p><blockquote>{{ article.law_quote }}</blockquote><p class="text-muted">Основание даты</p><blockquote>{{ article.date_quote }}</blockquote></details>{% endfor %}
+    {% endif %}
+    {% if run.snapshot %}<details class="automation-evidence"><summary>Сохранённые официальные тексты и сравнение статей</summary><p class="text-muted">Снимок {{ run.snapshot.captured_at }}. Эти данные использовались при решении.</p>
+      {% for article in run.snapshot.articles %}<h3>Статья {{ article.section_number }}</h3><div class="change-passage"><div class="change-before"><strong>Было</strong><pre>{{ article.before or 'Статьи не было.' }}</pre></div><div class="change-after"><strong>Стало</strong><pre>{{ article.after or 'Статья удалена.' }}</pre></div></div>{% endfor %}
+      <details><summary>Полный текст закона-поправки</summary><pre class="record-text">{{ run.snapshot.law.text }}</pre></details>
+    </details>{% endif %}
+    <details class="automation-evidence"><summary>Технический протокол проверки</summary><p>Контрольная сумма входных данных: <code>{{ run.input_sha256 or 'не сформирована' }}</code></p><pre class="record-text">{{ run.result | tojson(indent=2) }}</pre></details>
+  </div></div>
+  {% else %}<p class="text-muted">Попыток проверки ещё не было.</p>{% endfor %}
+</div>
+{% endblock %}

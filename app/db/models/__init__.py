@@ -1,3 +1,4 @@
+from app.db.models.automation import AutomationCase, AutomationRun
 from app.db.models.base import Base
 from app.db.models.configuration import ConfigurationChange, ServiceConfiguration
 from app.db.models.delivery_attempt import DeliveryAttempt
@@ -6,6 +7,8 @@ from app.db.models.monitoring import MonitoringDocumentCheck, MonitoringLogEntry
 from app.db.models.tracked_documents import TrackedDocument
 
 __all__ = [
+    "AutomationCase",
+    "AutomationRun",
     "Base",
     "DeliveryAttempt",
     "ConfigurationChange",

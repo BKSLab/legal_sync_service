@@ -11,7 +11,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.db.models.delivery_attempt import DeliveryAttempt
 from app.exceptions.legal_changes import LegalChangeRepositoryError
-from app.exceptions.rag import DeliveryPaused, RagRejectedError, RagStaleRevisionError
+from app.exceptions.rag import (
+    DeliveryPaused,
+    DeliveryVerificationError,
+    RagRejectedError,
+    RagStaleRevisionError,
+)
 from app.exceptions.redaction import RedactionNotReadyError
 
 current_delivery: ContextVar['DeliveryRecorder | None'] = ContextVar('current_delivery', default=None)
@@ -47,6 +52,8 @@ class DeliveryJournal:
             response = recorder.values['details'].get('response', {})
             if isinstance(error, DeliveryPaused):
                 status = 'paused'
+            elif isinstance(error, DeliveryVerificationError):
+                status = 'needs_review'
             elif isinstance(error, RagRejectedError | RagStaleRevisionError):
                 status = 'rejected'
             elif isinstance(error, RedactionNotReadyError):

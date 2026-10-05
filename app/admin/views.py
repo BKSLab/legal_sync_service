@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from wtforms import SelectField
 
+from app.admin.automation import automation_summary
 from app.admin.dashboard import get_dashboard_stats
 from app.admin.forms import AdminForm, AdminJSONField, UTCDateTimeField
 from app.core.settings import get_settings
@@ -85,11 +86,13 @@ class DashboardView(BaseView):
     @expose("/dashboard", methods=["GET"])
     async def dashboard(self, request: Request):
         configuration = None
+        automation = None
         async with self._admin_ref.session_maker() as db_session:
             stats = await get_dashboard_stats(db_session)
             if stats.postgres_ok:
                 try:
                     configuration = await ConfigurationRepository(db_session).get_or_create(initial_configuration(get_settings()))
+                    automation = await automation_summary(db_session)
                 except (SQLAlchemyError, OSError):
                     logger.exception("Не удалось прочитать конфигурацию для дашборда.")
         return await self.templates.TemplateResponse(
@@ -97,6 +100,7 @@ class DashboardView(BaseView):
                 "stats": stats,
                 "title": "Дашборд",
                 "configuration": configuration,
+                "automation": automation,
                 "scheduler_enabled": get_settings().scheduler.scheduler_enabled,
             },
         )

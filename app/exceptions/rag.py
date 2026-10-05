@@ -43,6 +43,10 @@ class RagRejectedError(RagClientError):
         return "RAG Service отклонил переданную статью."
 
 
+class DeliveryVerificationError(RagClientError):
+    """Содержимое или квитанция требуют разбора; повторная запись запрещена."""
+
+
 class RagStaleRevisionError(RagRejectedError):
     """В RAG уже есть более поздняя редакция; событие больше не требуется."""
 

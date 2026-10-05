@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from apscheduler.triggers.cron import CronTrigger
@@ -9,6 +10,8 @@ class ConfigurationValues(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     rag_delivery_enabled: bool = False
+    automation_mode: Literal["manual", "shadow", "auto"] = "manual"
+    verification_model: str = Field("google/gemini-3.5-flash-lite", min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9/._:-]*$")
     monitoring_enabled: bool = True
     monitoring_cron_hour: str = Field("*", min_length=1, max_length=100)
     processing_cron_hour: str = Field("4", min_length=1, max_length=100)

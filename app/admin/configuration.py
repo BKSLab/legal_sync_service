@@ -11,7 +11,7 @@ from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
-from app.core.settings import get_settings
+from app.core.settings import VerificationSettings, get_settings
 from app.exceptions.configuration import ConfigurationConflictError
 from app.repositories.configuration import ConfigurationRepository
 from app.schemas.configuration import ConfigurationValues
@@ -20,6 +20,8 @@ from app.services.configuration import initial_configuration
 logger = logging.getLogger(__name__)
 
 CONFIGURATION_LABELS = {
+    "automation_mode": "Режим проверки изменений",
+    "verification_model": "Модель проверки LLM",
     "rag_delivery_enabled": "Отправка в RAG",
     "monitoring_enabled": "Мониторинг по расписанию",
     "monitoring_cron_hour": "Расписание мониторинга",
@@ -38,6 +40,8 @@ SCHEDULE_CHOICES = {
 
 
 def display_configuration_value(name: str, value) -> str:
+    if name == "automation_mode":
+        return {"manual": "Ручное подтверждение", "shadow": "Проверка без автоподтверждения", "auto": "Автоматически, кроме исключений"}.get(value, str(value))
     if isinstance(value, bool):
         return "Включено" if value else "Выключено"
     if name.endswith("cron_hour"):
@@ -92,6 +96,7 @@ class ConfigurationView(BaseView):
 
         key = settings.rag.rag_service_api_key
         key_configured = bool(key and key.get_secret_value().strip())
+        verification = getattr(settings, "verification", VerificationSettings(_env_file=None))
         context = {
             "title": "Конфигурация", "configuration": None, "errors": {}, "error": None,
             "csrf_token": token, "history": [], "conflict": False,
@@ -99,6 +104,8 @@ class ConfigurationView(BaseView):
             "scheduler_enabled": settings.scheduler.scheduler_enabled,
             "rag_address": safe_service_address(settings.rag.rag_service_base_url),
             "rag_key_configured": key_configured,
+            "verification_key_configured": bool(verification.verification_api_key),
+            "verification_address": safe_service_address(verification.verification_api_url),
         }
         status_code = 200
         try:
@@ -108,6 +115,8 @@ class ConfigurationView(BaseView):
                 values = current.model_dump()
                 if form is not None:
                     values = {
+                        "automation_mode": str(form.get("automation_mode", current.automation_mode)),
+                        "verification_model": str(form.get("verification_model", current.verification_model)),
                         "rag_delivery_enabled": form.get("rag_delivery_enabled") == "on",
                         "monitoring_enabled": form.get("monitoring_enabled") == "on",
                         **{name: str(form.get(name, "")) for name in (
@@ -121,11 +130,16 @@ class ConfigurationView(BaseView):
                         for item in error.errors():
                             name = item["loc"][0]
                             context["errors"][name] = {
+                                "automation_mode": "Выберите режим проверки.",
+                                "verification_model": "Укажите идентификатор модели провайдера.",
                                 "timezone": "Укажите существующий часовой пояс, например Europe/Moscow.",
                                 "processing_max_retries": "Укажите целое число от 1 до 20.",
                             }.get(name, "Выберите корректное расписание.")
                     if values["rag_delivery_enabled"] and not key_configured:
                         context["errors"]["rag_delivery_enabled"] = "Для включения отправки задайте RAG_SERVICE_API_KEY на сервере."
+                        status_code = 422
+                    if values["automation_mode"] != "manual" and not verification.verification_api_key:
+                        context["errors"]["automation_mode"] = "Для автоматической проверки задайте VERIFICATION_API_KEY на сервере."
                         status_code = 422
                     try:
                         version = int(str(form.get("version", "")))

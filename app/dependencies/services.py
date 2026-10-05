@@ -9,6 +9,7 @@ from app.dependencies.repositories import (
     LegalChangesRepositoryDep,
     TrackedDocumentsRepositoryDep,
 )
+from app.repositories.automation import AutomationRepository
 from app.repositories.delivery_journal import DeliveryJournal
 from app.repositories.monitoring import MonitoringJournal
 from app.services.configuration import load_configuration
@@ -43,6 +44,7 @@ def get_legal_changes_service(
     return LegalChangesService(
         legal_changes_repository=legal_changes_repository,
         tracked_documents_repository=tracked_documents_repository,
+        automation_repository=AutomationRepository(async_sessionmaker(legal_changes_repository.db_session.bind, expire_on_commit=False)),
     )
 
 
@@ -64,6 +66,7 @@ def get_monitoring_service(
         legal_changes_repository=legal_changes_repository,
         pravo_ebpi_client=pravo_ebpi_client,
         journal=MonitoringJournal(async_session_factory),
+        automation_repository=AutomationRepository(async_session_factory),
     )
 
 
@@ -83,6 +86,7 @@ def get_processing_service(
         rag_client=rag_client,
         configuration_provider=load_configuration,
         journal=DeliveryJournal(async_sessionmaker(legal_changes_repository.db_session.bind, expire_on_commit=False)),
+        automation_repository=AutomationRepository(async_sessionmaker(legal_changes_repository.db_session.bind, expire_on_commit=False)),
     )
 
 

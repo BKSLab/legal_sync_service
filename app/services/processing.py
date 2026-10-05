@@ -8,7 +8,12 @@ from app.clients.rag import RagClient
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
 from app.exceptions.configuration import ConfigurationUnavailableError
 from app.exceptions.legal_changes import LegalChangeRepositoryError
-from app.exceptions.rag import DeliveryPaused, RagStaleRevisionError
+from app.exceptions.rag import (
+    DeliveryPaused,
+    DeliveryVerificationError,
+    RagRejectedError,
+    RagStaleRevisionError,
+)
 from app.exceptions.redaction import RedactionNotReadyError, RedactionParseError
 from app.repositories.delivery_journal import DeliveryJournal, current_delivery
 from app.repositories.legal_changes import LegalChangesRepository
@@ -16,6 +21,7 @@ from app.schemas.configuration import ConfigurationValues
 from app.schemas.monitoring import ProcessingResult
 from app.services.redaction_parser import RedactionDocument
 from app.services.section_text import SectionTextService
+from app.services.verification import digest, json_digest, payload_identity
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,7 @@ class ProcessingService:
         delivery_enabled: bool = False,
         configuration_provider: Callable[[], Awaitable[ConfigurationValues]] | None = None,
         journal: DeliveryJournal | None = None,
+        automation_repository=None,
     ):
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
@@ -47,6 +54,7 @@ class ProcessingService:
         self.delivery_enabled = delivery_enabled
         self.configuration_provider = configuration_provider
         self.journal = journal
+        self.automation_repository = automation_repository
 
     async def _delivery_enabled(self) -> bool:
         if self.configuration_provider is not None:
@@ -111,6 +119,7 @@ class ProcessingService:
         failed = 0
         postponed = 0
         superseded = 0
+        needs_review = 0
         delivery_disabled = False
 
         for change in changes:
@@ -138,7 +147,7 @@ class ProcessingService:
                 )
                 await self.legal_changes_repository.update(
                     change=change,
-                    values={"status": LegalChangeStatus.SCHEDULED},
+                    values={"status": LegalChangeStatus.SCHEDULED, "last_error": str(error)[:2000]},
                 )
                 postponed += 1
             except RagStaleRevisionError as error:
@@ -151,6 +160,14 @@ class ProcessingService:
                     },
                 )
                 superseded += 1
+            except (DeliveryVerificationError, RagRejectedError) as error:
+                message = str(error)[:2000]
+                await self.legal_changes_repository.update(change=change, values={
+                    "status": LegalChangeStatus.DRAFT, "last_error": message,
+                })
+                if self.automation_repository:
+                    await self.automation_repository.delivery_exception(change, message)
+                needs_review += 1
             except (LegalChangeRepositoryError, ConfigurationUnavailableError):
                 # При недоступной БД нельзя надёжно записать исход. Прерываем
                 # запуск; следующий владелец блокировки восстановит событие.
@@ -160,6 +177,9 @@ class ProcessingService:
                 # сюда не входит: остановленный запуск восстановится по БД.
                 await self._mark_failed(change=change, error=error)
                 failed += 1
+            else:
+                if self.automation_repository:
+                    await self.automation_repository.refresh_outcome(change)
 
         logger.info(
             "✅ Обработка очереди завершена. отобрано=%s отправлено=%s ошибок=%s отложено=%s устарело=%s",
@@ -176,6 +196,7 @@ class ProcessingService:
             changes_failed=failed,
             changes_postponed=postponed,
             changes_superseded=superseded,
+            changes_needing_review=needs_review,
         )
 
     # Блок приватных методов обработки события
@@ -214,6 +235,11 @@ class ProcessingService:
             document_hash=document.ebpi_doc_hash,
             parsed_redactions=parsed_redactions,
         )
+        if change.review_origin == "auto":
+            if (not change.verified_text_sha256 or not change.verified_payload_sha256
+                    or digest(redaction_text) != change.verified_text_sha256
+                    or json_digest(payload_identity(change)) != change.verified_payload_sha256):
+                raise DeliveryVerificationError("Текст или реквизиты изменились после автопроверки. Требуется новое решение по событию.")
         recorder = current_delivery.get()
         if recorder:
             await recorder.event(
@@ -277,3 +303,5 @@ class ProcessingService:
                 "last_error": str(error)[:2000],
             },
         )
+        if self.automation_repository and retry_count >= self.max_retries:
+            await self.automation_repository.delivery_exception(change, f"Исчерпан лимит отправки ({retry_count}). {str(error)[:1500]}")

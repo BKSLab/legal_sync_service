@@ -1,0 +1,30 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="col-12 d-block automation-page" data-auto-refresh="30">
+  <div class="card mb-3"><div class="card-header admin-toolbar"><h2 class="card-title">Управление автоматическим циклом</h2><a class="btn btn-outline-secondary" href="{{ url_for('admin:configuration') }}">Настройки</a></div>
+    <div class="card-body">
+      <p><strong>{{ {'manual':'Ручное подтверждение', 'shadow':'Проверка без автоподтверждения', 'auto':'Автоматический режим · оператору передаются исключения'}[configuration.automation_mode] }}</strong></p>
+      <div class="automation-flow"><span>Мониторинг</span><span>→</span><span>Все статьи и даты</span><span>→</span><span>Проверка LLM</span><span>→</span><span>Ожидание срока</span><span>→</span><span>Контроль текста</span><span>→</span><span>Приёмка RAG</span></div>
+      <p class="text-muted mt-3 mb-0">Модель: {{ configuration.verification_model }}. Очередь проверок обрабатывается каждую минуту; мониторинг и отправка — по расписаниям в конфигурации. Страница обновляется каждые 30 секунд.</p>
+      {% if not llm_configured %}<div class="alert alert-danger mt-3">Ключ LLM не настроен. Автоподтверждение невозможно.</div>{% endif %}
+      {% if not scheduler_enabled %}<div class="alert alert-warning mt-3">Планировщик выключен. Автоматический цикл остановлен.</div>{% endif %}
+      {% if not configuration.rag_delivery_enabled %}<div class="alert alert-warning mt-3">Отправка в RAG приостановлена.</div>{% endif %}
+    </div>
+  </div>
+  <div class="automation-counters mb-3">
+    {% for key in ['pending','running','approved','needs_review','error','shadow_pass','resolved','delivered'] %}<a class="card" href="{{ url_for('admin:automation').include_query_params(status=key) }}"><div class="card-body"><strong class="automation-count">{{ overview.counts.get(key,0) }}</strong><span>{{ statuses[key] }}</span></div></a>{% endfor %}
+  </div>
+  <div class="admin-toolbar mb-3"><h2 class="card-title">{{ statuses.get(status, 'Все проверки законов и редакций') }}</h2><a class="btn btn-outline-secondary" href="{{ url_for('admin:automation') }}">Все проверки</a></div>
+  {% for item in items %}
+  <article class="card mb-3"><div class="card-header admin-toolbar"><h3 class="card-title"><a href="{{ url_for('admin:automation_case', case_id=item.case.id) }}">Проверка №{{ item.case.id }} · {{ item.document.short_name }}</a></h3><strong class="{{ 'text-danger' if item.case.status in ['needs_review','error'] else '' }}">{{ statuses[item.case.status] }}</strong></div>
+    <div class="card-body"><p>{{ item.law }} · редакция {{ item.case.redaction_id }}</p>
+      <p>{{ item.case.message or 'Ожидает обработки очередью.' }}</p>
+      <div class="automation-facts"><span>Этап: <strong>{{ stages.get(item.case.stage,item.case.stage) }}</strong></span><span>Статей: <strong>{{ item.changes|length }}</strong></span><span>Доставлено в RAG: <strong>{{ item.sent }} / {{ item.changes|length }}</strong></span></div>
+      {% if item.sent and item.sent < item.changes|length %}<p class="text-warning mt-2 mb-0">Частичная доставка: обновление всего набора ещё не завершено.</p>{% endif %}
+      {% if item.case.next_attempt_at and item.case.status == 'error' %}<p class="text-muted mt-2">Повтор после {{ item.case.next_attempt_at.strftime('%d.%m.%Y %H:%M') }} UTC</p>{% endif %}
+    </div><div class="card-footer text-muted">Обновлено {{ item.case.updated_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · <a href="{{ url_for('admin:automation_case', case_id=item.case.id) }}">Статьи, доказательства и история</a></div>
+  </article>
+  {% else %}<div class="card"><div class="card-body">В этой очереди нет проверок. Новые редакции появляются после мониторинга; существующие черновики подхватываются автоматически при включённой проверке.</div></div>{% endfor %}
+  <div class="admin-actions">{% if page > 1 %}<a class="btn btn-outline-secondary" href="{{ url_for('admin:automation').include_query_params(page=page-1,status=status) }}">Назад</a>{% endif %}{% if has_next %}<a class="btn btn-outline-secondary" href="{{ url_for('admin:automation').include_query_params(page=page+1,status=status) }}">Далее</a>{% endif %}</div>
+</div>
+{% endblock %}

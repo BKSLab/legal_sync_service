@@ -16,6 +16,7 @@ from app.db.models.tracked_documents import TrackedDocument
 from app.exceptions.rag import RagClientError
 
 DELIVERY_LABELS = {
+    'needs_review': 'Приёмка не подтверждена · нужен оператор',
     'running': 'В работе', 'succeeded': 'Коллекция обновлена', 'warning': 'Обновлено с предупреждениями',
     'accepted': 'Получен ответ без подтверждения этапов', 'failed': 'Ошибка', 'rejected': 'Отклонено',
     'unknown': 'Исход неизвестен', 'postponed': 'Отложено', 'paused': 'Отправка приостановлена',

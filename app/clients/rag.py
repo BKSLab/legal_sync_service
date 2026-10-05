@@ -6,7 +6,12 @@ from typing import Any
 import httpx
 
 from app.core.settings import RagSettings
-from app.exceptions.rag import RagClientError, RagRejectedError, RagStaleRevisionError
+from app.exceptions.rag import (
+    DeliveryVerificationError,
+    RagClientError,
+    RagRejectedError,
+    RagStaleRevisionError,
+)
 from app.repositories.delivery_journal import current_delivery
 
 logger = logging.getLogger(__name__)
@@ -143,6 +148,8 @@ class RagClient:
                 ):
                     raise RagStaleRevisionError(conflict)
 
+        if response.status_code in (408, 429):
+            raise RagClientError(f"RAG Service временно недоступен: HTTP {response.status_code}.")
         if 400 <= response.status_code < 500:
             # Отклонение по содержимому повторять бессмысленно: тот же текст
             # будет отклонён снова, событию нужен оператор.
@@ -159,9 +166,9 @@ class RagClient:
         try:
             result = response.json()
         except ValueError as error:
-            raise RagClientError("RAG Service вернул не JSON.") from error
+            raise DeliveryVerificationError("RAG Service вернул не JSON; исход записи требует проверки.") from error
         if not isinstance(result, dict):
-            raise RagClientError('RAG Service вернул некорректный результат.')
+            raise DeliveryVerificationError('RAG Service вернул некорректный результат; исход записи требует проверки.')
         if recorder:
             await recorder.event('response_received', response={
                 key: result[key] for key in (
@@ -170,13 +177,15 @@ class RagClient:
                     'collection_name', 'input_sha256', 'integrity_verified',
                 ) if key in result
             })
-        if result.get('operation_id'):
-            expected = {
-                'document_id': document_id, 'section_number': section_number, 'version': revision_date.isoformat(),
-                'input_sha256': hashlib.sha256(raw_text.encode()).hexdigest(), 'integrity_verified': True,
-            }
-            if any(result.get(key) != value for key, value in expected.items()):
-                raise RagClientError('Подтверждение RAG не соответствует отправленной статье. Проверьте журнал попытки.')
+        expected = {
+            'document_id': document_id, 'section_number': section_number, 'version': revision_date.isoformat(),
+            'input_sha256': hashlib.sha256(raw_text.encode()).hexdigest(), 'integrity_verified': True,
+        }
+        if (response.status_code != 200 or not isinstance(result.get('operation_id'), str)
+                or not result['operation_id'].strip() or result.get('status') != 'succeeded'
+                or result.get('warnings') or result.get('integrity_verified') is not True
+                or any(result.get(key) != value for key, value in expected.items())):
+            raise DeliveryVerificationError('Нет полного подтверждения успешной записи именно этой статьи. Повторная отправка остановлена; проверьте журнал RAG.')
         logger.info(
             "✅ Статья принята RAG. document_id=%s section=%s",
             document_id,

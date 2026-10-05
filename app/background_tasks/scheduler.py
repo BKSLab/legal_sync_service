@@ -9,13 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.pravo_ebpi import PravoEbpiClient
 from app.clients.rag import RagClient
+from app.clients.verification import VerificationClient
 from app.core.settings import get_settings
 from app.db.session import async_session_factory
+from app.repositories.automation import AutomationRepository
 from app.repositories.delivery_journal import DeliveryJournal
 from app.repositories.legal_changes import LegalChangesRepository
 from app.repositories.monitoring import MonitoringJournal
 from app.repositories.tracked_documents import TrackedDocumentsRepository
 from app.schemas.configuration import ConfigurationValues
+from app.services.automation import AutomationService
 from app.services.configuration import load_configuration
 from app.services.monitoring import MonitoringService
 from app.services.processing import ProcessingService
@@ -48,8 +51,18 @@ async def run_monitoring_job() -> None:
             legal_changes_repository=LegalChangesRepository(db_session=db_session),
             pravo_ebpi_client=PravoEbpiClient(httpx_client=httpx_client, settings=settings.pravo_ebpi),
             journal=MonitoringJournal(async_session_factory),
+            automation_repository=AutomationRepository(async_session_factory),
         )
         await service.run_monitoring(source="scheduled")
+
+
+async def run_verification_job() -> None:
+    settings = get_settings()
+    async with httpx.AsyncClient() as client:
+        await AutomationService(
+            AutomationRepository(async_session_factory), PravoEbpiClient(client, settings.pravo_ebpi),
+            VerificationClient(client, settings.verification), load_configuration,
+        ).run()
 
 
 async def run_processing_job() -> None:
@@ -70,12 +83,20 @@ async def run_processing_job() -> None:
             rag_client=RagClient(httpx_client=httpx_client, settings=settings.rag),
             configuration_provider=load_configuration,
             journal=DeliveryJournal(async_session_factory),
+            automation_repository=AutomationRepository(async_session_factory),
         )
         await service.run_processing()
 
 
 def apply_configuration(scheduler: AsyncIOScheduler, configuration: ConfigurationValues) -> None:
     """Меняет только изменившиеся задания, сохраняя ближайшие запуски остальных."""
+    verification = scheduler.get_job("legal_sync_verification")
+    if configuration.automation_mode == "manual":
+        if verification:
+            scheduler.remove_job("legal_sync_verification")
+    elif verification is None:
+        scheduler.add_job(run_verification_job, "interval", seconds=60, id="legal_sync_verification",
+                          coalesce=True, max_instances=1, misfire_grace_time=60)
     for job_id, function, enabled, hour in (
         ("legal_sync_monitoring", run_monitoring_job, configuration.monitoring_enabled, configuration.monitoring_cron_hour),
         ("legal_sync_processing", run_processing_job, configuration.rag_delivery_enabled, configuration.processing_cron_hour),

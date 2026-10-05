@@ -180,6 +180,10 @@ class LegalChangeSchema(BaseModel):
         examples=["2027-03-01T00:00:00Z"],
     )
     reviewed_by: str | None = Field(None, description="Кто подтвердил событие.", examples=["ivanov"])
+    review_origin: str | None = Field(None, description="Источник решения: auto или human.")
+    automation_run_id: int | None = Field(None, description="Попытка автоматической проверки, подтвердившая событие.")
+    verified_text_sha256: str | None = Field(None, description="SHA-256 текста, разрешённого автоматической проверкой.")
+    verified_payload_sha256: str | None = Field(None, description="SHA-256 проверенных реквизитов отправки.")
     reviewed_at: datetime | None = Field(
         None, description="Когда событие подтверждено.", examples=["2026-09-07T10:15:00Z"],
     )

@@ -1,5 +1,14 @@
 /* Элементы управления админкой. Подписи и сообщения — на русском. */
 $(function () {
+    const refreshRoot = document.querySelector('[data-auto-refresh]');
+    if (refreshRoot) {
+        window.setInterval(function () {
+            const editing = document.activeElement && document.activeElement.matches('input, textarea, select');
+            if (!document.hidden && !editing && !document.querySelector('details[open]') && !String(window.getSelection())) {
+                window.location.reload();
+            }
+        }, Number(refreshRoot.dataset.autoRefresh) * 1000);
+    }
     const checks = $('.select-box');
     const bulkDelete = $('#action-delete');
     function updateSelection() {

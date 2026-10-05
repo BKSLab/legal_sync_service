@@ -1,6 +1,7 @@
 {% extends "sqladmin/details.html" %}
 {% block content %}
 <div class="col-12 d-block change-review-page">
+  {% if automation_case %}<div class="card mb-3"><div class="card-header admin-toolbar"><h2 class="card-title">Автоматический цикл</h2><a class="btn btn-outline-primary" href="{{ url_for('admin:automation_case', case_id=automation_case.id) }}">Все статьи, проверки и доказательства</a></div><div class="card-body"><p>{{ automation_case.message or 'Проверка находится в очереди.' }}</p><p class="mb-0">Решение по статье: <strong>{{ {'auto':'подтверждена автоматически','human':'принято оператором'}.get(model.review_origin,'ещё не принято') }}</strong>{% if automation_run %} · модель {{ automation_run.model }} · попытка №{{ automation_run.id }}{% endif %}</p>{% if model.last_error %}<p class="text-danger mt-3">{{ model.last_error }}</p>{% endif %}</div></div>{% endif %}
   <div class="card mb-3">
     <div class="card-header admin-toolbar">
       <div>
@@ -47,6 +48,7 @@
         {% else %}<p class="text-muted mb-0">Прямая ссылка на акт отсутствует в данных события. Для поиска используйте реквизиты выше.</p>{% endif %}
         {% if document_url %}<a class="btn btn-outline-secondary" href="{{ document_url }}" target="_blank" rel="noopener noreferrer">Основной документ на pravo.gov.ru</a>{% endif %}
       </div>
+      {% if related_changes|length > 1 %}<div class="mt-3"><strong>Другие статьи по этому закону</strong><div class="admin-actions mt-2">{% for related in related_changes %}<a class="btn btn-outline-secondary" href="{{ url_for('admin:details', identity='legal-change', pk=related.id) }}">Статья {{ related.section_number }} · №{{ related.id }}</a>{% endfor %}</div></div>{% endif %}
     </div>
   </div>
 

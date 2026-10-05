@@ -45,6 +45,7 @@ def _change(**overrides):
         "amending_act_number": "246-ФЗ",
         "amending_act_date": date(2026, 7, 26),
         "retry_count": 0,
+        "review_origin": None,
         "status": LegalChangeStatus.SCHEDULED,
         "tracked_document": _tracked_document(),
     }
@@ -248,7 +249,7 @@ async def test_incomplete_redaction_postpones_and_returns_to_scheduled(
 
 
 @pytest.mark.asyncio
-async def test_rag_rejection_marks_change_failed(redaction_html, redaction_content_nodes):
+async def test_rag_rejection_requires_operator_without_automatic_retry(redaction_html, redaction_content_nodes):
     service, repository, _, rag_client = _build_service(
         redaction_html, redaction_content_nodes, [_change()]
     )
@@ -256,10 +257,10 @@ async def test_rag_rejection_marks_change_failed(redaction_html, redaction_conte
 
     result = await service.run_processing()
 
-    assert result.changes_failed == 1
+    assert result.changes_needing_review == 1
     values = repository.update.await_args_list[-1].kwargs["values"]
-    assert values["status"] == LegalChangeStatus.FAILED
-    assert values["retry_count"] == 1
+    assert values["status"] == LegalChangeStatus.DRAFT
+    assert "retry_count" not in values
     assert "category" in values["last_error"]
 
 

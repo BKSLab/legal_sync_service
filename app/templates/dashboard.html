@@ -1,5 +1,12 @@
 {% extends "sqladmin/layout.html" %}
 {% block content %}
+{% if automation and configuration %}
+<div class="col-12 d-block"><div class="card mb-3"><div class="card-header admin-toolbar"><h2 class="card-title">Автоматическое обновление документов</h2><a class="btn btn-primary" href="{{ url_for('admin:automation') }}">Наблюдать за системой</a></div><div class="card-body">
+  <p>Режим: <strong>{{ {'manual':'ручное подтверждение','shadow':'автопроверка без подтверждения','auto':'автоматически, человеку только исключения'}[configuration.automation_mode] }}</strong></p>
+  <div class="automation-facts"><span>В очереди: <strong>{{ automation.counts.get('pending',0) }}</strong></span><span>Проверяются: <strong>{{ automation.counts.get('running',0) }}</strong></span><span>Автоподтверждено: <strong>{{ automation.counts.get('approved',0) }}</strong></span><a href="{{ url_for('admin:automation').include_query_params(status='needs_review') }}">Исключения: <strong>{{ automation.counts.get('needs_review',0) }}</strong></a><a href="{{ url_for('admin:automation').include_query_params(status='error') }}">Ошибки с повтором: <strong>{{ automation.counts.get('error',0) }}</strong></a></div>
+  {% if automation.last_run %}<p class="text-muted mt-3 mb-0">Последняя автопроверка: <a href="{{ url_for('admin:automation_case', case_id=automation.last_run.case_id) }}">№{{ automation.last_run.id }}</a> · {{ automation.last_run.started_at.strftime('%d.%m.%Y %H:%M:%S') }} UTC · модель {{ automation.last_run.model }}</p>{% endif %}
+</div></div></div>
+{% endif %}
 <div class="col-12">
   <div class="alert {{ 'alert-info' if configuration else 'alert-warning' }}" role="status">
     {% if configuration %}

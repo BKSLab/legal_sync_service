@@ -9,7 +9,7 @@ import pytest
 from app.clients.rag import RagClient
 from app.core.settings import RagSettings
 from app.db.models.delivery_attempt import DeliveryAttempt
-from app.exceptions.rag import RagClientError
+from app.exceptions.rag import DeliveryVerificationError, RagClientError
 from app.repositories.delivery_journal import DeliveryJournal
 from app.repositories.legal_changes import LegalChangesRepository
 from app.services.processing import ProcessingService
@@ -86,22 +86,23 @@ async def test_timeout_is_unknown_and_retry_keeps_both_attempts(session_factory)
 
 
 @pytest.mark.parametrize('payload, expected', [
-    ({'chunks_count': 2}, 'accepted'),
-    (receipt(status='warning', warnings=['Registry write failed']), 'warning'),
+    ({'chunks_count': 2}, 'needs_review'),
+    (receipt(status='warning', warnings=['Registry write failed']), 'needs_review'),
 ])
 async def test_legacy_and_warning_responses_are_not_plain_success(session_factory, payload, expected):
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))) as client:
-        await processor(session_factory, client)._process_change(_change(), {})
+        with pytest.raises(DeliveryVerificationError):
+            await processor(session_factory, client)._process_change(_change(), {})
     row, = await attempts(session_factory)
     assert row.status == expected
 
 
 async def test_wrong_checksum_is_not_acknowledged_as_delivered(session_factory):
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=receipt(input_sha256='wrong')))) as client:
-        with pytest.raises(RagClientError, match='не соответствует'):
+        with pytest.raises(DeliveryVerificationError, match='подтверждения'):
             await processor(session_factory, client)._process_change(_change(), {})
     row, = await attempts(session_factory)
-    assert row.status == 'failed' and row.details['response']['input_sha256'] == 'wrong'
+    assert row.status == 'needs_review' and row.details['response']['input_sha256'] == 'wrong'
 
 
 async def test_cancelled_delivery_survives_and_recovery_does_not_invent_success(session_factory):

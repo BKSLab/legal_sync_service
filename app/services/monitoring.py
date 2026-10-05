@@ -44,11 +44,13 @@ class MonitoringService:
         legal_changes_repository: LegalChangesRepository,
         pravo_ebpi_client: PravoEbpiClient,
         journal: MonitoringJournal | None = None,
+        automation_repository=None,
     ):
         self.tracked_documents_repository = tracked_documents_repository
         self.legal_changes_repository = legal_changes_repository
         self.pravo_ebpi_client = pravo_ebpi_client
         self.journal = journal
+        self.automation_repository = automation_repository
         self.recorder: MonitoringRunRecorder | None = None
 
     # Блок публичных методов
@@ -304,6 +306,8 @@ class MonitoringService:
 
         citation = self._parse_amending_citation(caption=redaction.caption)
         if citation is None:
+            if self.automation_repository:
+                await self.automation_repository.ensure_case(document.id, redaction.redaction_id, None)
             await self._record("missing_citation", "В подписи редакции нет реквизитов акта-поправки; события не созданы.", {
                 "redaction_id": redaction.redaction_id, "caption": redaction.caption,
             }, "warning")
@@ -317,6 +321,8 @@ class MonitoringService:
         parsed_redaction = await self._build_redaction_document(redaction_id=redaction.redaction_id)
         amending_hash = parsed_redaction.find_amending_document_hash(citation=citation)
         if amending_hash is None:
+            if self.automation_repository:
+                await self.automation_repository.ensure_case(document.id, redaction.redaction_id, None)
             await self._record("amending_act_not_found", "Акт-поправка не найден в тексте редакции; события не созданы.", {
                 "redaction_id": redaction.redaction_id, "citation": citation,
             }, "warning")
@@ -341,6 +347,8 @@ class MonitoringService:
             previous_redaction=previous_document,
         )
         if not changed_sections:
+            if self.automation_repository:
+                await self.automation_repository.ensure_case(document.id, redaction.redaction_id, amending_hash)
             await self._record("no_changed_sections", "Новых изменений текста статей не найдено.", {"redaction_id": redaction.redaction_id})
             logger.info(
                 "ℹ️ Новых изменений текста статей не найдено. document_id=%s redaction_id=%s акт=%s",
@@ -377,6 +385,8 @@ class MonitoringService:
             "redaction_id": redaction.redaction_id, "sections": [item.section_number for item in changes],
         })
         created = await self.legal_changes_repository.save_redaction_changes(data=changes)
+        if self.automation_repository:
+            await self.automation_repository.ensure_case(document.id, redaction.redaction_id, amending_hash)
         progress.changes_created += created
         await self._record("changes_saved", "События изменений сохранены.", {
             "redaction_id": redaction.redaction_id, "sections": [item.section_number for item in changes],
