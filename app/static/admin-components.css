@@ -134,7 +134,8 @@ span.flatpickr-weekday,
 .admin-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .admin-login form { width: 100%; max-width: 420px; }
 
-.row-deck > .change-review-page { display: block; }
+.change-review-page { min-width: 0; }
+.change-review-page .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .change-review-page .card-title { line-height: 1.5; }
 .change-review-page .card-body { overflow-wrap: anywhere; }
 .change-review-lead { font-size: 17px; line-height: 1.6; }

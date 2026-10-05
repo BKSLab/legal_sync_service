@@ -13,8 +13,8 @@
   {% if admin.favicon_url %}
   <link rel="icon" href="{{ admin.favicon_url }}">
   {% endif %}
-  <link rel="stylesheet" href="{{ url_for('static', path='admin-theme.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='admin-components.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='admin-theme.css').include_query_params(v=asset_versions['admin-theme.css']) }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='admin-components.css').include_query_params(v=asset_versions['admin-components.css']) }}">
   {% block head %}
   {% endblock %}
   <title>{{ admin.title }}</title>
@@ -33,7 +33,7 @@
   <script type="text/javascript" src="{{ url_for('admin:statics', path='js/bootstrap.min.js') }}"></script>
   <script type="text/javascript" src="{{ url_for('admin:statics', path='js/select2.full.min.js') }}"></script>
   <script type="text/javascript" src="{{ url_for('admin:statics', path='js/flatpickr.min.js') }}"></script>
-  <script type="text/javascript" src="{{ url_for('static', path='admin.js') }}"></script>
+  <script type="text/javascript" src="{{ url_for('static', path='admin.js').include_query_params(v=asset_versions['admin.js']) }}"></script>
   {% block tail %}
   {% endblock %}
 </body>

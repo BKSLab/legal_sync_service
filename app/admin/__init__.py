@@ -1,3 +1,4 @@
+from hashlib import sha256
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -63,6 +64,12 @@ def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
         base_url="/admin",
         templates_dir=str(_APP_DIR / "templates"),
     )
+    # New asset URLs prevent cached styles/scripts surviving an application update.
+    admin.templates.env.globals["asset_versions"] = {
+        path.name: sha256(path.read_bytes()).hexdigest()[:16]
+        for path in (_APP_DIR / "static").iterdir()
+        if path.suffix in {".css", ".js"}
+    }
     admin.templates.env.filters["change_status"] = format_change_status
     admin.templates.env.filters["monitoring_status"] = monitoring_status
     admin.templates.env.policies["json.dumps_kwargs"] = {"sort_keys": True, "ensure_ascii": False}
