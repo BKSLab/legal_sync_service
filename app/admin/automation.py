@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.exceptions import HTTPException
 from starlette.responses import RedirectResponse
 
+from app.admin.configuration import display_configuration_value, next_runs
 from app.core.settings import VerificationSettings, get_settings
 from app.db.models import AutomationCase, AutomationRun, LegalChange, TrackedDocument
 from app.repositories.automation import AutomationRepository
@@ -60,13 +61,17 @@ class AutomationView(BaseView):
                 ).order_by(LegalChange.id)))
                 items.append({"case": case, "document": document, "changes": changes,
                               "sent": sum(c.status.value == "sent" for c in changes),
-                              "law": changes[0].amending_law_ref if changes else "Реквизиты требуют проверки"})
+                              "law": f"{changes[0].amending_act_type or 'Акт-поправка'} {changes[0].amending_law_ref}" if changes else "Реквизиты требуют проверки",
+                              "effective_dates": ", ".join(sorted({c.effective_date.strftime('%d.%m.%Y') for c in changes if c.effective_date}))})
         verification = getattr(settings, "verification", VerificationSettings(_env_file=None))
         return await self.templates.TemplateResponse(request, "automation.html", {
             "title": "Автоматическое обновление RAG", "configuration": configuration, "overview": overview,
             "items": items, "status": status, "statuses": AUTOMATION_STATUSES, "stages": AUTOMATION_STAGES,
             "page": page, "has_next": len(rows) > 30, "llm_configured": bool(verification.verification_api_key),
             "scheduler_enabled": settings.scheduler.scheduler_enabled,
+            "monitoring_schedule": display_configuration_value("monitoring_cron_hour", configuration.monitoring_cron_hour),
+            "delivery_schedule": display_configuration_value("processing_cron_hour", configuration.processing_cron_hour),
+            "next_runs": next_runs(configuration, settings.scheduler.scheduler_enabled),
         })
 
     @expose("/automation/{case_id:int}", methods=["GET"])
