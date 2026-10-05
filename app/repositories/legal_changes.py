@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.db.models.legal_changes import LegalChange, LegalChangeStatus
-from app.exceptions.legal_changes import LegalChangeRepositoryError
+from app.exceptions.legal_changes import LegalChangeRepositoryError, LegalChangeReviewConflictError
 from app.schemas.legal_changes import LegalChangeCreateRequest
 
 PROCESSING_LOCK_KEY = 8_401_002
@@ -246,6 +246,30 @@ class LegalChangesRepository:
             saved = result.scalar_one_or_none() is not None
             await self.db_session.commit()
             return saved
+        except SQLAlchemyError as error:
+            await self.db_session.rollback()
+            raise LegalChangeRepositoryError(str(error)) from error
+
+    async def save_review(self, change: LegalChange, values: dict) -> LegalChange:
+        """Ровно одно решение по неизменённому черновику, включая конкурентные запросы."""
+        try:
+            result = await self.db_session.execute(
+                update(LegalChange)
+                .where(
+                    LegalChange.id == change.id,
+                    LegalChange.status == LegalChangeStatus.DRAFT,
+                    LegalChange.updated_at == change.updated_at,
+                )
+                .values(**values)
+                .returning(LegalChange.id)
+                .execution_options(synchronize_session=False)
+            )
+            if result.scalar_one_or_none() is None:
+                await self.db_session.rollback()
+                raise LegalChangeReviewConflictError
+            await self.db_session.commit()
+            await self.db_session.refresh(change)
+            return change
         except SQLAlchemyError as error:
             await self.db_session.rollback()
             raise LegalChangeRepositoryError(str(error)) from error

@@ -54,7 +54,7 @@ async def test_approve_change_moves_draft_to_scheduled():
         reviewed_at=datetime.now(tz=UTC),
     )
     changes_repository.get_by_id.return_value = draft_change
-    changes_repository.update.return_value = scheduled_change
+    changes_repository.save_review.return_value = scheduled_change
     service = LegalChangesService(
         legal_changes_repository=changes_repository,
         tracked_documents_repository=documents_repository,
@@ -65,7 +65,7 @@ async def test_approve_change_moves_draft_to_scheduled():
 
     assert result.status == LegalChangeStatus.SCHEDULED
     assert result.reviewed_by == "admin"
-    changes_repository.update.assert_awaited_once()
+    changes_repository.save_review.assert_awaited_once()
 
 
 @pytest.mark.asyncio

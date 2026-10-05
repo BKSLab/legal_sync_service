@@ -11,6 +11,7 @@ from app.exceptions.legal_changes import (
     LegalChangeNotFoundError,
     LegalChangePreviewConflictError,
     LegalChangeRepositoryError,
+    LegalChangeReviewConflictError,
     LegalChangeServiceError,
 )
 from app.exceptions.pravo_ebpi import PravoEbpiClientError
@@ -172,6 +173,7 @@ async def approve_legal_change(
         return result
     except (
         LegalChangeInvalidStatusError,
+        LegalChangeReviewConflictError,
         LegalChangeNotFoundError,
         LegalChangeServiceError,
     ) as error:

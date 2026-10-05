@@ -1,6 +1,13 @@
 from fastapi import status
 
 
+class LegalChangeReviewConflictError(Exception):
+    """Событие изменилось после открытия карточки или уже проверено."""
+
+    status_code = status.HTTP_409_CONFLICT
+    detail = "Событие уже изменилось. Обновите карточку перед принятием решения."
+
+
 class LegalChangePreviewConflictError(Exception):
     """Пробный запуск невозможен в текущем состоянии очереди или события."""
 

@@ -134,6 +134,30 @@ span.flatpickr-weekday,
 .admin-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .admin-login form { width: 100%; max-width: 420px; }
 
+.row-deck > .change-review-page { display: block; }
+.change-review-page .card-title { line-height: 1.5; }
+.change-review-page .card-body { overflow-wrap: anywhere; }
+.change-review-lead { font-size: 17px; line-height: 1.6; }
+.change-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.change-facts span, .change-facts strong { display: block; }
+.change-facts strong { margin-top: 6px; }
+.change-comparison-head, .change-passage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.change-comparison-head { margin-bottom: 12px; }
+.change-passage { margin-bottom: 16px; }
+.change-before, .change-after { min-width: 0; padding: 16px; border-radius: 6px; border: 1px solid var(--border); }
+.change-before { border-left: 4px solid #b54747; }
+.change-after { border-left: 4px solid #23835b; }
+.change-passage pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.65; background: transparent; color: inherit; padding: 0; margin: 0; }
+.change-side-label { display: none; font-weight: 600; margin-bottom: 8px; }
+.change-review-page summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+.change-review-page .review-date { max-width: 240px; }
+.change-technical > .col-12 { padding: 0; margin-top: 12px; }
+@media (max-width: 767px) {
+    .change-facts, .change-passage { grid-template-columns: minmax(0, 1fr); }
+    .change-comparison-head { display: none; }
+    .change-side-label { display: block; }
+}
+
 .row-deck > .configuration-page { display: block; }
 .row-deck > .monitoring-page { display: block; }
 .monitoring-filters, .monitoring-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

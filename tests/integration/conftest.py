@@ -45,6 +45,7 @@ async def admin_client(session_factory, monkeypatch):
     monkeypatch.setattr("app.admin.auth.get_settings", lambda: settings)
     monkeypatch.setattr("app.admin.views.get_settings", lambda: settings)
     monkeypatch.setattr("app.admin.preview.get_settings", lambda: settings)
+    monkeypatch.setattr("app.admin.change_review.get_settings", lambda: settings)
     monkeypatch.setattr("app.admin.configuration.get_settings", lambda: settings)
     monkeypatch.setattr("app.services.configuration.get_settings", lambda: settings)
     monkeypatch.setattr("app.services.configuration.async_session_factory", session_factory)

@@ -1,12 +1,109 @@
 {% extends "sqladmin/details.html" %}
 {% block content %}
-<div class="col-12 mb-3"><a class="btn" href="/admin/document-trace?document_id={{ model.tracked_document.document_id | urlencode }}">Весь путь документа и попытки доставки</a></div>
-{% if model.status.value in ['draft', 'approved', 'scheduled', 'failed'] %}
-<div class="col-12 mb-3">
-  <a class="btn btn-primary" href="{{ url_for('admin:preview_change', change_id=model.id) }}">
-    Проверить извлечение статьи
-  </a>
+<div class="col-12 change-review-page">
+  <div class="card mb-3">
+    <div class="card-header admin-toolbar">
+      <div>
+        <div class="text-muted">{{ model.tracked_document.full_title }}</div>
+        <h2 class="card-title">Статья {{ model.section_number }}{% if model.section_title %}. {{ model.section_title }}{% endif %}</h2>
+      </div>
+      {{ model.status | change_status }}
+    </div>
+    <div class="card-body">
+      <p class="change-review-lead">Найдено изменение статьи по акту <strong>{{ model.amending_act_type or 'Акт-поправка' }} {{ model.amending_law_ref }}</strong>.</p>
+      <div class="change-facts">
+        <div><span class="text-muted">Вступление изменения в силу</span><strong>{{ model.effective_date.strftime('%d.%m.%Y') if model.effective_date else 'Дата не указана' }}</strong></div>
+        <div><span class="text-muted">Обнаружено сервисом</span><strong>{{ model.created_at.strftime('%d.%m.%Y %H:%M') }} UTC</strong></div>
+        <div><span class="text-muted">Обновление в RAG</span><strong>{{ 'Отправлено ' ~ model.sent_at.strftime('%d.%m.%Y %H:%M') ~ ' UTC' if model.sent_at else 'Не отправлено' }}</strong></div>
+      </div>
+      {% if model.status.value == 'draft' %}
+      <p class="mt-3 mb-0">Проверьте закон-поправку, сравнение текстов и дату вступления в силу. Подтверждение разрешит обновление этой статьи в RAG после наступления срока.</p>
+      {% elif model.status.value == 'scheduled' %}
+      <p class="mt-3 mb-0">Изменение подтверждено и ожидает срока и планового запуска отправки.</p>
+      {% elif model.status.value == 'cancelled' %}
+      <p class="mt-3 mb-0">Событие отменено. Оно не участвует в очереди отправки.</p>
+      {% elif model.status.value == 'approved' %}
+      <p class="alert alert-warning mt-3">У события прежний статус «Подтверждено». Очередь этот статус не обрабатывает; требуется корректная постановка в расписание.</p>
+      {% elif model.status.value == 'failed' %}
+      <p class="alert alert-danger mt-3">Последняя отправка завершилась ошибкой: {{ model.last_error or 'Откройте историю попыток.' }}</p>
+      {% elif model.status.value == 'processing' %}
+      <p class="mt-3 mb-0">Статья сейчас обрабатывается. Результат появится в истории доставки.</p>
+      {% endif %}
+      {% if model.reviewed_at %}<p class="text-muted mt-3 mb-0">Решение: {{ model.reviewed_by }} · {{ model.reviewed_at.strftime('%d.%m.%Y %H:%M') }} UTC{% if model.review_notes %}<br>{{ model.review_notes }}{% endif %}</p>{% endif %}
+    </div>
+    <div class="card-footer admin-actions">
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin:list', identity='legal-change') }}">К списку событий</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin:document_trace').include_query_params(document_id=model.tracked_document.document_id) }}">История документа и доставки</a>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header"><h2 class="card-title">Основание изменения</h2></div>
+    <div class="card-body">
+      <p>{{ model.amending_act_type or 'Акт-поправка' }} {{ model.amending_law_ref }}</p>
+      <p class="text-muted">Откройте сам акт и проверьте, какие изменения он вносит в статью и когда они вступают в силу.</p>
+      <div class="admin-actions">
+        {% if amendment_url %}<a class="btn btn-primary" href="{{ amendment_url }}" target="_blank" rel="noopener noreferrer">Открыть закон-поправку на pravo.gov.ru</a>
+        {% else %}<p class="text-muted mb-0">Прямая ссылка на акт отсутствует в данных события. Для поиска используйте реквизиты выше.</p>{% endif %}
+        {% if document_url %}<a class="btn btn-outline-secondary" href="{{ document_url }}" target="_blank" rel="noopener noreferrer">Основной документ на pravo.gov.ru</a>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3" id="comparison">
+    <div class="card-header admin-toolbar">
+      <h2 class="card-title">Что изменилось в статье</h2>
+      <a class="btn btn-outline-primary" href="{{ url_for('admin:details', identity='legal-change', pk=model.id).include_query_params(compare='1') }}#comparison">{{ 'Обновить сравнение' if comparison else 'Загрузить сравнение «было → стало»' }}</a>
+    </div>
+    <div class="card-body">
+      {% if comparison_error %}<div class="alert alert-warning" role="alert">Сравнение не загружено: {{ comparison_error }}</div>{% endif %}
+      {% if comparison %}
+        <p class="text-muted">Сравниваются редакция события и непосредственно предшествующая ей редакция из официального источника. Сравнение не подтверждает событие и не запускает отправку.</p>
+        {% if comparison.previous %}
+        <div class="change-comparison-head"><strong>Было · {{ comparison.previous.redaction_date.strftime('%d.%m.%Y') }}</strong><strong>Стало · {{ comparison.current.redaction_date.strftime('%d.%m.%Y') }}</strong></div>
+        {% if comparison.new_article %}<p>В предыдущей редакции этой статьи нет. Ниже показана добавленная статья.</p>{% endif %}
+        {% for passage in comparison.passages %}
+        <div class="change-passage">
+          <div class="change-before"><span class="change-side-label">Было · {{ comparison.previous.redaction_date.strftime('%d.%m.%Y') }}</span><pre>{{ passage.before or 'Такого фрагмента не было.' }}</pre></div>
+          <div class="change-after"><span class="change-side-label">Стало · {{ comparison.current.redaction_date.strftime('%d.%m.%Y') }}</span><pre>{{ passage.after or 'Фрагмент удалён.' }}</pre></div>
+        </div>
+        {% else %}<p>Различий в извлечённом тексте статьи не найдено.</p>{% endfor %}
+        {% else %}<p>Предыдущая редакция не представлена в источнике. Показан полный текст редакции события; установить различия по этим данным нельзя.</p>{% endif %}
+        <details class="mt-3" {% if not comparison.previous %}open{% endif %}><summary>Полный текст статьи в редакции события</summary><pre class="record-text">{{ comparison.after }}</pre></details>
+        {% if comparison.before %}<details class="mt-3"><summary>Полный текст статьи в предыдущей редакции</summary><pre class="record-text">{{ comparison.before }}</pre></details>{% endif %}
+      {% else %}<p class="mb-0">Загрузите обе редакции с портала, чтобы увидеть изменённые и добавленные фрагменты. Состояние события при просмотре не меняется.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="card mb-3" id="review">
+    <div class="card-header"><h2 class="card-title">Решение по изменению</h2></div>
+    <div class="card-body">
+      {% if review_error %}<div class="alert alert-danger" role="alert">{{ review_error }}</div>{% endif %}
+      {% if request.query_params.get('review') == 'approve' and model.status.value == 'scheduled' %}<div class="alert alert-success" role="status">Изменение подтверждено и поставлено в расписание отправки.</div>{% endif %}
+      {% if request.query_params.get('review') == 'reject' and model.status.value == 'cancelled' %}<div class="alert alert-info" role="status">Изменение отклонено. Событие исключено из отправки.</div>{% endif %}
+      {% if model.status.value in ['draft', 'scheduled', 'failed'] %}
+        {% if configuration_error %}<p>{{ configuration_error }}</p>
+        {% elif not configuration.rag_delivery_enabled %}<p>Отправка в RAG отключена. Подтверждённое событие будет ждать её включения и наступления срока.</p>
+        {% elif not scheduler_enabled %}<p>Автоматический планировщик выключен. Для отправки потребуется его включение или ручной запуск очереди.</p>
+        {% elif next_delivery %}<p>Ближайшая отправка по текущему расписанию{% if model.status.value == 'draft' %} после подтверждения{% endif %}: <strong>{{ next_delivery.strftime('%d.%m.%Y %H:%M') }}</strong> ({{ configuration.timezone }}).{% if model.status.value == 'draft' %} При изменении даты ниже срок будет пересчитан.{% endif %}</p>
+        {% else %}<p>Для расчёта срока отправки укажите дату вступления изменения в силу.</p>{% endif %}
+      {% endif %}
+      {% if model.status.value == 'draft' %}
+      <form method="post" action="{{ url_for('admin:review_change', change_id=model.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="updated_at" value="{{ model.updated_at.isoformat() }}">
+        <div class="mb-3"><label class="form-label" for="review-effective-date">Дата вступления изменения в силу</label><input class="form-control review-date" id="review-effective-date" type="date" name="effective_date" value="{{ review_values.get('effective_date', model.effective_date.isoformat() if model.effective_date else '') }}" required></div>
+        <div class="mb-3"><label class="form-label" for="review-notes">Комментарий к решению</label><textarea class="form-control" id="review-notes" name="review_notes" rows="3">{{ review_values.get('review_notes', '') }}</textarea></div>
+        <p class="text-muted">Подтверждение разрешает отправить полный текст этой статьи в редакции события после наступления срока. Имя проверяющего и время решения сохраняются автоматически.</p>
+        <div class="admin-actions"><button class="btn btn-primary" type="submit" name="decision" value="approve">Подтвердить и запланировать</button><button class="btn btn-outline-danger" type="submit" name="decision" value="reject" formnovalidate>Отклонить изменение</button></div>
+      </form>
+      {% elif not model.reviewed_at %}<p class="mb-0">Для текущего состояния новое решение по черновику недоступно.</p>{% endif %}
+    </div>
+  </div>
+
+  {% if model.status.value in ['draft', 'approved', 'scheduled', 'failed'] %}
+  <div class="mb-3"><a class="btn btn-outline-secondary" href="{{ url_for('admin:preview_change', change_id=model.id) }}">Проверить извлечение статьи</a></div>
+  {% endif %}
+  <details class="change-technical"><summary>Технические сведения и сохранённый текст статьи</summary>{{ super() }}</details>
 </div>
-{% endif %}
-{{ super() }}
 {% endblock %}

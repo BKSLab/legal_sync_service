@@ -5,10 +5,12 @@ from fastapi.staticfiles import StaticFiles
 from sqladmin import Admin
 from sqladmin.authentication import login_required
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.admin.auth import AdminAuth
+from app.admin.change_review import ChangeReviewView, render_change_details
 from app.admin.configuration import ConfigurationView
 from app.admin.document_trace import DocumentTraceView
 from app.admin.documentation import DocumentationView
@@ -31,6 +33,17 @@ class LegalSyncAdmin(Admin):
     @login_required
     async def index(self, request: Request) -> RedirectResponse:
         return RedirectResponse(request.url_for("admin:dashboard"), status_code=303)
+
+    @login_required
+    async def details(self, request: Request):
+        if request.path_params["identity"] != "legal-change":
+            return await super().details(request)
+        await self._details(request)
+        view = self._find_model_view("legal-change")
+        model = await view.get_object_for_details(request.path_params["pk"])
+        if model is None:
+            raise HTTPException(404, "Событие не найдено.")
+        return await render_change_details(self, request, model)
 
 
 def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
@@ -62,4 +75,5 @@ def create_admin(app: FastAPI, engine: AsyncEngine) -> Admin:
     admin.add_view(ConfigurationView)
     admin.add_view(DocumentationView)
     admin.add_view(ChangePreviewView)
+    admin.add_view(ChangeReviewView)
     return admin

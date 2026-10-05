@@ -17,6 +17,7 @@ from app.repositories.tracked_documents import TrackedDocumentsRepository
 from app.schemas.legal_changes import LegalChangeCreateRequest
 from app.schemas.monitoring import MonitoringDocumentResult, MonitoringResult
 from app.schemas.pravo_ebpi import EbpiRedaction
+from app.services.change_review import redaction_order
 from app.services.redaction_parser import RedactionDocument
 
 logger = logging.getLogger(__name__)
@@ -290,8 +291,7 @@ class MonitoringService:
         хронологию: будущую редакцию портал может подготовить заранее.
         """
 
-        position = re.match(r"^\s*(\d+)\.", redaction.caption or "")
-        return redaction.redaction_date, int(position.group(1)) if position else 0
+        return redaction_order(redaction)
 
     async def _create_changes_for_redaction(
         self,

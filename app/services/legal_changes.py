@@ -97,7 +97,20 @@ class LegalChangesService:
             "reviewed_at": datetime.now(tz=UTC),
             "review_notes": data.review_notes,
         }
-        updated = await self.legal_changes_repository.update(change=change, values=values)
+        updated = await self.legal_changes_repository.save_review(change=change, values=values)
+        return LegalChangeSchema.model_validate(updated)
+
+    async def reject_change(self, change_id: int, data: LegalChangeReviewRequest) -> LegalChangeSchema:
+        """Отклоняет черновик с сохранением решения проверяющего."""
+        change = await self._get_existing_change(change_id=change_id)
+        if change.status != LegalChangeStatus.DRAFT:
+            raise LegalChangeInvalidStatusError(change.id, change.status.value, LegalChangeStatus.DRAFT.value)
+        updated = await self.legal_changes_repository.save_review(change=change, values={
+            "status": LegalChangeStatus.CANCELLED,
+            "reviewed_by": data.reviewed_by,
+            "reviewed_at": datetime.now(UTC),
+            "review_notes": data.review_notes,
+        })
         return LegalChangeSchema.model_validate(updated)
 
     async def cancel_change(self, change_id: int, review_notes: str | None = None) -> LegalChangeSchema:
